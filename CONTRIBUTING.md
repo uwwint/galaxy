@@ -46,6 +46,21 @@ https://help.github.com/en/github/getting-started-with-github/git-and-github-lea
    [two-factor authentication](https://docs.github.com/en/github/authenticating-to-github/securing-your-account-with-two-factor-authentication-2fa).
    Additionally, you may want to [sign your commits](https://docs.github.com/en/github/authenticating-to-github/managing-commit-signature-verification).
 
+### Pre-commit hooks
+
+Galaxy tracks its pre-commit hooks in ``.pre-commit-config.yaml`` so you can run
+the same checks locally that CI uses. To install and enable them:
+
+1. Activate your development virtualenv (e.g. ``. .venv/bin/activate``).
+2. Install the tool: ``pip install pre-commit``.
+3. Register the commit-time hooks: ``pre-commit install``.
+4. Register the push-time hooks: ``pre-commit install --hook-type pre-push``.
+
+Commit hooks run fast, file-scoped checks (formatting and linting) on staged
+changes. Push hooks run the full formatting, linting, and type-check suite.
+Before pushing, you can also run ``pre-commit run --hook-stage pre-push --all-files``
+to mirror the push gate manually.
+
 2. Fork the [galaxy repository](https://github.com/galaxyproject/galaxy) on
    GitHub to make your changes.  To keep your copy up to date with respect to
    the main repository, you need to frequently [sync your

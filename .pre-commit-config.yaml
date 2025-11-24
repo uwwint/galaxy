@@ -1,0 +1,45 @@
+repos:
+  - repo: local
+    hooks:
+      - id: python-format-diff
+        name: python format (diff)
+        language: system
+        entry: bash -c ". ./.venv/bin/activate 2>/dev/null || true; darker --revision HEAD \"$@\"" --
+        types: [python]
+        stages: [pre-commit]
+      - id: python-ruff
+        name: python lint (ruff on staged files)
+        language: system
+        entry: bash -c ". ./.venv/bin/activate 2>/dev/null || true; ruff check --fix --exit-non-zero-on-fix \"$@\""
+        types: [python]
+        stages: [pre-commit]
+      - id: prettier-commit
+        name: client prettier (staged files)
+        language: system
+        entry: bash -c "cd client && yarn run prettier --check --ignore-unknown \"$@\""
+        files: ^client/.*\\.(css|scss|js|jsx|ts|tsx|vue|json|md|yaml|yml|html)$
+        stages: [pre-commit]
+      - id: eslint-commit
+        name: client eslint (staged files)
+        language: system
+        entry: bash -c "cd client && yarn run eslint --max-warnings=0 \"$@\""
+        files: ^client/.*\\.(js|jsx|ts|tsx|vue)$
+        stages: [pre-commit]
+      - id: python-format-lint-mypy
+        name: python full format + lint + mypy
+        language: system
+        entry: bash -c "make format && tox -e lint && tox -e mypy"
+        pass_filenames: false
+        stages: [pre-push]
+      - id: prettier-check-client
+        name: client prettier --check (push)
+        language: system
+        entry: bash -c "cd client && yarn run prettier --check"
+        pass_filenames: false
+        stages: [pre-push]
+      - id: eslint-client
+        name: client eslint (push)
+        language: system
+        entry: bash -c "cd client && yarn run eslint"
+        pass_filenames: false
+        stages: [pre-push]

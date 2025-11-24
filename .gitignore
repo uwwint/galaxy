@@ -130,7 +130,6 @@ tool_test_output.json
 .vscode
 client/**/jsconfig.json
 vetur.config.js
-.pre-commit-config.yaml
 galaxy.code-workspace
 
 # Chrom len files
