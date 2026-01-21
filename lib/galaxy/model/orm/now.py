@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 # NOTE REGARDING TIMESTAMPS:
 #   It is currently difficult to have the timestamps calculated by the
@@ -8,6 +8,7 @@ from datetime import datetime
 #   web servers, use a time server to ensure synchronization
 
 # Return the current time in UTC without any timezone information
-now = datetime.utcnow
+def now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 __all__ = ("now",)
