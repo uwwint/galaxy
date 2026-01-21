@@ -5,11 +5,23 @@ client currently).
 """
 
 import logging
+import warnings
 from typing import (
     Any,
 )
 
-import refgenconf
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"pkg_resources is deprecated as an API.*",
+        category=UserWarning,
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r"Deprecated call to .*pkg_resources\\.declare_namespace.*",
+        category=DeprecationWarning,
+    )
+    import refgenconf
 
 from galaxy import util
 from galaxy.tool_util.data import (
