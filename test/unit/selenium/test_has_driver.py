@@ -69,6 +69,7 @@ class SimpleTarget(Target):
 
 
 class TestHasDriverImpl(HasDriver):
+    __test__ = False
     """
     Concrete implementation of HasDriver for testing.
 
@@ -93,6 +94,7 @@ class TestHasDriverImpl(HasDriver):
 
 
 class TestHasPlaywrightDriverImpl(HasPlaywrightDriver):
+    __test__ = False
     """
     Concrete implementation of HasPlaywrightDriver for testing.
 

@@ -247,6 +247,7 @@ JobDict = Dict[str, Any]
 
 
 class TestJob(StrictModel):
+    __test__ = False
     doc: Optional[str]
     job: JobDict
     outputs: Dict[str, TestOutputAssertions]
@@ -254,6 +255,7 @@ class TestJob(StrictModel):
 
 
 Tests = RootModel[List[TestJob]]
+Tests.__test__ = False
 
 # TODO: typed dict versions of all thee above for verify code - make this Dict[str, Any] here more
 # specific.

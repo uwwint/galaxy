@@ -61,6 +61,7 @@ class TestToolShedConfig:
 
 
 class TestToolShedApp(ToolShedApp):
+    __test__ = False
     repository_types_registry = RepositoryTypesRegistry()
     config: TestToolShedConfig
     hgweb_config_manager = hgweb_config_manager

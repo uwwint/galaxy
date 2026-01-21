@@ -39,12 +39,14 @@ LATEST_VERSION = None
 
 
 class TestReference(NamedTuple):
+    __test__ = False
     tool_id: str
     tool_version: Optional[str]
     test_index: int
 
 
 class TestException(NamedTuple):
+    __test__ = False
     tool_id: str
     exception: Exception
     was_recorded: bool

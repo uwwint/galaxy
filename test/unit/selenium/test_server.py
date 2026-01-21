@@ -8,6 +8,7 @@ from typing import Optional
 
 
 class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    __test__ = False
     """Custom request handler for serving test HTML files."""
 
     def __init__(self, *args, directory: Optional[str] = None, **kwargs):
@@ -25,6 +26,7 @@ class TestHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 
 class TestHTTPServer:
+    __test__ = False
     """Simple HTTP server for serving test HTML pages."""
 
     def __init__(self, port: int = 0, directory: Optional[Path] = None):

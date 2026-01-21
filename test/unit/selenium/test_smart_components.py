@@ -19,6 +19,7 @@ from .test_has_driver import (
 
 # Test component hierarchy for testing
 class TestComponent:
+    __test__ = False
     """Simple test component with selector attributes for testing SmartComponent."""
 
     def __init__(self):

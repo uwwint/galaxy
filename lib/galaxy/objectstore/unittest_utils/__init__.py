@@ -34,6 +34,7 @@ extra_dirs:
 
 
 class Config:
+    __test__ = False
     def __init__(
         self,
         config_str=DISK_TEST_CONFIG,

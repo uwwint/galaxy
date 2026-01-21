@@ -91,10 +91,12 @@ class UpgradeInstancePayload(BaseModel):
 
 
 class TestUpdateInstancePayload(BaseModel):
+    __test__ = False
     variables: Optional[SuppliedVariables] = None
 
 
 class TestUpgradeInstancePayload(BaseModel):
+    __test__ = False
     template_version: int
     variables: SuppliedVariables
     secrets: SuppliedSecrets

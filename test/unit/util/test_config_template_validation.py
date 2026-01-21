@@ -31,6 +31,7 @@ TEST_TEMPLATE_VERSION = 0
 
 
 class TestTemplate(StrictModel):
+    __test__ = False
     id: str
     type: str = "test"
     version: int
@@ -61,6 +62,7 @@ def _template_with_secret(name: str) -> TestTemplate:
 
 
 class TestInstanceDefinition(StrictModel):
+    __test__ = False
     template_id: str
     template_version: int
     variables: Dict[str, Any]

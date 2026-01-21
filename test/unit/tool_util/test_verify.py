@@ -31,6 +31,7 @@ F3 = b"A\nB\n\xfc"
 F4 = b"A\r\nB\nC"
 MULTILINE_MATCH = b".*"
 TestFile = collections.namedtuple("TestFile", "value path")
+TestFile.__test__ = False
 
 TestDef = Tuple[bytes, bytes, Optional[Dict[str, Any]], Optional[Type[AssertionError]]]
 

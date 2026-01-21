@@ -10,6 +10,7 @@ from galaxy.files.plugins import FileSourcePluginsConfig
 
 
 class TestConfiguredFileSources(ConfiguredFileSources):
+    __test__ = False
     def __init__(self, file_sources_config: FileSourcePluginsConfig, conf_dict: dict, test_root: Optional[str]):
         super().__init__(file_sources_config, ConfiguredFileSourcesConf(conf_dict=conf_dict))
         self.test_root = test_root
@@ -17,6 +18,7 @@ class TestConfiguredFileSources(ConfiguredFileSources):
 
 class TestPosixConfiguredFileSources(TestConfiguredFileSources):
     """A posix file source at test1 rooted on supplied root."""
+    __test__ = False
 
     def __init__(self, root: str):
         plugin = {

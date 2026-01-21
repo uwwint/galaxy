@@ -1287,6 +1287,7 @@ class MockWorkflowContentsManager:
 
 
 class TestApp(GalaxyDataTestApp):
+    __test__ = False
     workflow_contents_manager = MockWorkflowContentsManager()
 
     def add_and_commit(self, *objs):

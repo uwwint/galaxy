@@ -57,6 +57,7 @@ WARN_ON_UNTYPED_XML_STRINGS = False
 
 @dataclass
 class TestCaseStateAndWarnings:
+    __test__ = False
     tool_state: TestCaseToolState
     warnings: List[str]
     unhandled_inputs: List[str]
@@ -64,6 +65,7 @@ class TestCaseStateAndWarnings:
 
 @dataclass
 class TestCaseStateValidationResult:
+    __test__ = False
     tool_state: TestCaseToolState
     warnings: List[str]
     validation_error: Optional[Exception]
