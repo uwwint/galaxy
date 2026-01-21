@@ -34,6 +34,7 @@ HANDLER_TEMPLATE_JOB_CONF = os.path.join(os.path.dirname(__file__), "handler_tem
 
 class TestApplicationStack(ApplicationStack):
     __test__ = False
+
     def get_preferred_handler_assignment_method(self):
         return HANDLER_ASSIGNMENT_METHODS.DB_SKIP_LOCKED
 

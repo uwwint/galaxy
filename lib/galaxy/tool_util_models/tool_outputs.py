@@ -109,12 +109,8 @@ class IncomingToolOutputDataset(
     name: Annotated[
         Optional[str], Field(description="Parameter name. Used when referencing parameter in workflows.")
     ] = None
-    hidden: Annotated[
-        Optional[bool], Field(description="If true, the output will not be shown in the history.")
-    ] = None
-    format: Annotated[
-        Optional[str], Field(description="The short name for the output datatype.")
-    ] = None
+    hidden: Annotated[Optional[bool], Field(description="If true, the output will not be shown in the history.")] = None
+    format: Annotated[Optional[str], Field(description="The short name for the output datatype.")] = None
 
 
 class ToolOutputCollectionStructure(ToolSourceBaseModel):
@@ -140,9 +136,7 @@ class IncomingToolOutputCollection(GenericToolOutputCollection[Optional[bool], O
     name: Annotated[
         Optional[str], Field(description="Parameter name. Used when referencing parameter in workflows.")
     ] = None
-    hidden: Annotated[
-        Optional[bool], Field(description="If true, the output will not be shown in the history.")
-    ] = None
+    hidden: Annotated[Optional[bool], Field(description="If true, the output will not be shown in the history.")] = None
 
 
 class ToolOutputSimple(GenericToolOutputBaseModel):
