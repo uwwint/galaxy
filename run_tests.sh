@@ -371,6 +371,8 @@ do
           GALAXY_TEST_TOOL_CONF="lib/galaxy/config/sample/tool_conf.xml.sample,test/functional/tools/sample_tool_conf.xml"
           marker="not cwl_conformance"
           report_file="./run_api_tests.html"
+          # API tests start Galaxy + DB; running in parallel can race database creation.
+          parallel_args=()
           if [ $# -gt 1 ]; then
               api_script=$2
               shift 2
