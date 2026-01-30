@@ -43,8 +43,11 @@ from galaxy.util import (
     safe_makedirs,
 )
 
+
 def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 DEFAULT_STORAGE_DURATION = 24 * 60 * 60  # store for a day by default
 
 
