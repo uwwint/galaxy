@@ -640,6 +640,8 @@ fi
 setup_python
 
 if [ -n "$framework_test" ] || [ -n "$data_managers_test" ] ; then
+    # Framework tool/data manager tests spin up a Galaxy app + shared DB; running in parallel can race schema creation.
+    parallel_args=()
     if [ -n "$test_id" ]; then
         selector="-k $test_id"
     else
