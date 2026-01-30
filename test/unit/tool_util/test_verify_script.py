@@ -20,7 +20,7 @@ from galaxy.tool_util.verify.script import (
     build_case_references,
     Results,
     test_tools as run,
-    TestReference,
+    ToolTestReference,
 )
 
 VT_PATH = "galaxy.tool_util.verify.script.verify_tool"
@@ -71,9 +71,9 @@ def test_test_tools() -> None:
     f = NamedTemporaryFile()
     results = Results("my suite", f.name)
     test_references = [
-        TestReference("cat", "0.1.0", 0),
-        TestReference("cat", "0.1.0", 1),
-        TestReference("cat", "0.2.0", 0),
+        ToolTestReference("cat", "0.1.0", 0),
+        ToolTestReference("cat", "0.1.0", 1),
+        ToolTestReference("cat", "0.2.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -95,7 +95,7 @@ def test_test_tools_no_history_cleanup() -> None:
     f = NamedTemporaryFile()
     results = Results("my suite", f.name)
     test_references = [
-        TestReference("cat", "0.1.0", 0),
+        ToolTestReference("cat", "0.1.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -118,7 +118,7 @@ def test_test_tools_history_reuse() -> None:
     f = NamedTemporaryFile()
     results = Results(EXISTING_SUITE_NAME, f.name)
     test_references = [
-        TestReference("cat", "0.1.0", 0),
+        ToolTestReference("cat", "0.1.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -143,7 +143,7 @@ def test_test_tools_no_history_reuse() -> None:
     f = NamedTemporaryFile()
     results = Results("existing suite", f.name)
     test_references = [
-        TestReference("cat", "0.1.0", 0),
+        ToolTestReference("cat", "0.1.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -168,7 +168,7 @@ def test_test_tools_history_name() -> None:
     f = NamedTemporaryFile()
     results = Results("my suite", f.name)
     test_references = [
-        TestReference("cat", "0.1.0", 0),
+        ToolTestReference("cat", "0.1.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -193,8 +193,8 @@ def test_test_tool_per_test_history() -> None:
     f = NamedTemporaryFile()
     results = Results("my suite", f.name)
     test_references = [
-        TestReference("cat", "0.1.0", 0),
-        TestReference("cat", "0.1.0", 1),
+        ToolTestReference("cat", "0.1.0", 0),
+        ToolTestReference("cat", "0.1.0", 1),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -217,7 +217,7 @@ def test_test_tools_records_exception() -> None:
     f = NamedTemporaryFile()
     results = Results("my suite", f.name)
     test_references = [
-        TestReference("bad", "0.1.0", 0),
+        ToolTestReference("bad", "0.1.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
@@ -242,7 +242,7 @@ def test_test_tools_records_retry_exception() -> None:
     f = NamedTemporaryFile()
     results = Results("my suite", f.name)
     test_references = [
-        TestReference("bad", "0.1.0", 0),
+        ToolTestReference("bad", "0.1.0", 0),
     ]
     with mock.patch(VT_PATH) as mock_verify:
         assert_results_not_written(results)
