@@ -15,6 +15,7 @@ from concurrent.futures import (
 from typing import (
     Any,
     Callable,
+    ClassVar,
     Dict,
     List,
     NamedTuple,
@@ -39,19 +40,17 @@ LATEST_VERSION = None
 
 
 class TestReference(NamedTuple):
+    __test__: ClassVar[bool] = False
     tool_id: str
     tool_version: Optional[str]
     test_index: int
 
 
 class TestException(NamedTuple):
+    __test__: ClassVar[bool] = False
     tool_id: str
     exception: Exception
     was_recorded: bool
-
-
-setattr(TestReference, "__test__", False)
-setattr(TestException, "__test__", False)
 
 
 class Results:

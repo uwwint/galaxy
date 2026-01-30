@@ -5,6 +5,7 @@ import math
 import tempfile
 from typing import (
     Any,
+    cast,
     Dict,
     List,
     Optional,
@@ -31,7 +32,7 @@ F3 = b"A\nB\n\xfc"
 F4 = b"A\r\nB\nC"
 MULTILINE_MATCH = b".*"
 TestFile = collections.namedtuple("TestFile", "value path")
-setattr(TestFile, "__test__", False)
+cast(Any, TestFile).__test__ = False
 
 TestDef = Tuple[bytes, bytes, Optional[Dict[str, Any]], Optional[Type[AssertionError]]]
 
