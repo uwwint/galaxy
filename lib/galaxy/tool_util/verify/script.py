@@ -49,6 +49,7 @@ class ToolTestException(NamedTuple):
     exception: Exception
     was_recorded: bool
 
+
 class Results:
     test_exceptions: List[ToolTestException]
 
