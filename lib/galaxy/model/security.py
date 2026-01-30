@@ -4,6 +4,7 @@ import sqlite3
 from datetime import (
     datetime,
     timedelta,
+    timezone,
 )
 from typing import (
     Optional,
@@ -1707,7 +1708,8 @@ class HostAgent(RBACAgent):
                     hdadaa.site,
                 )
                 return False  # remote addr is not in the server list
-            if (datetime.utcnow() - hdadaa.update_time) > timedelta(seconds=60):
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
+            if (now - hdadaa.update_time) > timedelta(seconds=60):
                 log.debug(
                     "Denying access to private dataset with hda: %d.  Authorization was granted, but has expired.",
                     hda.id,
@@ -1726,7 +1728,7 @@ class HostAgent(RBACAgent):
         )
         hdadaa = self.sa_session.scalars(stmt).first()
         if hdadaa:
-            hdadaa.update_time = datetime.utcnow()
+            hdadaa.update_time = datetime.now(timezone.utc).replace(tzinfo=None)
         else:
             hdadaa = HistoryDatasetAssociationDisplayAtAuthorization(hda=hda, user=user, site=site)
         self.sa_session.add(hdadaa)
@@ -1791,7 +1793,7 @@ def _get_valid_roles_exposed(session, search_query, is_admin, limit, page, page_
         )
         stmt = stmt.union(stmt2)
 
-    count_stmt = select(func.count()).select_from(stmt)
+    count_stmt = select(func.count()).select_from(stmt.subquery())
     total_count = session.scalar(count_stmt)
 
     stmt = stmt.order_by(Role.name)

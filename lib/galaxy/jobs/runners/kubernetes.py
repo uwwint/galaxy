@@ -8,7 +8,10 @@ import math
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import (
+    datetime,
+    timezone,
+)
 from typing import (
     Any,
     TYPE_CHECKING,
@@ -748,7 +751,8 @@ class KubernetesJobRunner(AsynchronousJobRunner[AsynchronousJobState]):
                         if self.runner_params.get("k8s_unschedulable_walltime_limit"):
                             creation_time_str = k8s_job.obj["metadata"].get("creationTimestamp")
                             creation_time = datetime.strptime(creation_time_str, "%Y-%m-%dT%H:%M:%SZ")
-                            elapsed_seconds = (datetime.utcnow() - creation_time).total_seconds()
+                            now = datetime.now(timezone.utc).replace(tzinfo=None)
+                            elapsed_seconds = (now - creation_time).total_seconds()
                             if elapsed_seconds > self.runner_params["k8s_unschedulable_walltime_limit"]:
                                 return self._handle_unschedulable_job(k8s_job, job_state)
                             else:

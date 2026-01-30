@@ -106,13 +106,14 @@ class TestJobsApi(ApiTestCase, TestsTools):
 
     @pytest.mark.require_new_history
     def test_index_date_filter(self, history_id):
-        two_weeks_ago = (datetime.datetime.utcnow() - datetime.timedelta(14)).isoformat()
-        last_week = (datetime.datetime.utcnow() - datetime.timedelta(7)).isoformat()
-        before = datetime.datetime.utcnow().isoformat()
+        now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        two_weeks_ago = (now - datetime.timedelta(14)).isoformat()
+        last_week = (now - datetime.timedelta(7)).isoformat()
+        before = now.isoformat()
         today = before[:10]
-        tomorrow = (datetime.datetime.utcnow() + datetime.timedelta(1)).isoformat()[:10]
+        tomorrow = (now + datetime.timedelta(1)).isoformat()[:10]
         self.__history_with_new_dataset(history_id)
-        after = datetime.datetime.utcnow().isoformat()
+        after = now.isoformat()
 
         # Test using dates
         jobs = self.__jobs_index(data={"date_range_min": today, "date_range_max": tomorrow})

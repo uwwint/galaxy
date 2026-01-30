@@ -1,5 +1,6 @@
 import logging
 import os
+from io import BytesIO
 from typing import (
     Any,
     Optional,
@@ -109,7 +110,7 @@ class WorkflowRunCrateProfileBuilder:
                 # dataset was not serialized - create a local identifier to use in the crate
                 filename = f"#datasets/dataset_{dataset.dataset.uuid}"
                 description = "This file was hidden or discarded prior to export."
-                source = None
+                source = BytesIO(b"")
             else:
                 source = os.path.join(self.model_store.export_directory, filename)
             name = dataset.name

@@ -7694,7 +7694,7 @@ class HistoryDatasetCollectionAssociation(
             )
 
             # Combine subqueries
-            subq = subq1.union(subq2)
+            subq = subq1.union(subq2).subquery()
 
             # Build and return final query
             stm = select().select_from(subq)
@@ -11166,7 +11166,7 @@ class UserAuthnzToken(Base, UserMixin, RepresentById):
         Arguments are directly passed to filter() manager method.
         (Required by social_core.storage.UserMixin interface)
         """
-        stmt_user = select(User).filter_by(*args, **kwargs)
+        stmt_user = select(User).filter_by(*args, **kwargs).subquery()
         stmt_count = select(func.count()).select_from(stmt_user)
         return cls.sa_session.scalar(stmt_count) > 0
 

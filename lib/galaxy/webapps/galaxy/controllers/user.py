@@ -6,6 +6,7 @@ import logging
 from datetime import (
     datetime,
     timedelta,
+    timezone,
 )
 from urllib.parse import unquote
 
@@ -246,7 +247,8 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
         #  Activation is forced and the user is not active yet. Check the grace period.
         activation_grace_period = trans.app.config.activation_grace_period
         delta = timedelta(hours=int(activation_grace_period))
-        time_difference = datetime.utcnow() - create_time
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        time_difference = now - create_time
         return time_difference > delta or activation_grace_period == 0
 
     @web.expose

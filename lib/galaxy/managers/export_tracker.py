@@ -1,6 +1,7 @@
 from datetime import (
     datetime,
     timedelta,
+    timezone,
 )
 from typing import (
     Optional,
@@ -96,7 +97,7 @@ class StoreExportTracker:
         Returns:
             List of export associations for the user.
         """
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         stmt = (
             select(StoreExportAssociation)
             .where(

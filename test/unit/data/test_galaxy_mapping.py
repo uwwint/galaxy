@@ -437,8 +437,16 @@ class TestMappings(BaseModelTestCase):
         loaded_workflow = self.model.session.get(model.Workflow, workflow_id)
         assert len(loaded_workflow.steps[0].annotations) == 1
         copied_workflow = loaded_workflow.copy(user=user)
+        for step in copied_workflow.steps:
+            if step.subworkflow and get_object_session(step.subworkflow):
+                step.subworkflow = None
         annotations = copied_workflow.steps[0].annotations
         assert len(annotations) == 1
+        for step in copied_workflow.steps:
+            if get_object_session(step):
+                self.model.session.expunge(step)
+        if get_object_session(copied_workflow):
+            self.model.session.expunge(copied_workflow)
 
         stored_workflow = loaded_workflow.stored_workflow
         counts = stored_workflow.invocation_counts()

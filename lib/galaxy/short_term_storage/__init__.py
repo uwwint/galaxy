@@ -13,7 +13,10 @@ import json
 import os
 import shutil
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import (
+    datetime,
+    timezone,
+)
 from pathlib import Path
 from typing import (
     Any,
@@ -40,7 +43,8 @@ from galaxy.util import (
     safe_makedirs,
 )
 
-now = datetime.utcnow
+def now():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 DEFAULT_STORAGE_DURATION = 24 * 60 * 60  # store for a day by default
 
 

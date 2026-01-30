@@ -4,6 +4,8 @@ import os
 try:
     import docutils.core
     import docutils.io
+    import docutils.parsers.rst
+    import docutils.readers.standalone
     import docutils.utils
     import docutils.writers.html4css1
 except ImportError:
@@ -46,13 +48,13 @@ def get_publisher(error=False):
 
     Publisher = docutils.core.Publisher
     pub = Publisher(
-        parser=None,
+        reader=docutils.readers.standalone.Reader(),
+        parser=docutils.parsers.rst.Parser(),
         writer=docutils_writer,
         settings=None,
         source_class=docutils.io.StringInput,
         destination_class=docutils.io.StringOutput,
     )
-    pub.set_components("standalone", "restructuredtext", "pseudoxml")
     pub.process_programmatic_settings(None, settings_overrides, None)
     return pub
 

@@ -493,5 +493,5 @@ def get_repositories_with_user(session, user_model):
 
 
 def get_certified_repositories_with_user(session, where_clauses, user_model):
-    stmt = select(Repository).join(RepositoryMetadata).where(or_(*where_clauses)).join(user_model)
+    stmt = select(Repository).join(RepositoryMetadata).where(or_(false(), *where_clauses)).join(user_model)
     return session.scalars(stmt)

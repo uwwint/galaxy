@@ -41,7 +41,7 @@ class InfluxDBPlugin(ErrorPlugin):
             [
                 {
                     "measurement": "galaxy_tool_error",
-                    "time": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "time": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "fields": {"value": 1},
                     "tags": {
                         "exit_code": job.exit_code,

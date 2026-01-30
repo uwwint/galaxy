@@ -1,6 +1,7 @@
 from datetime import (
     datetime,
     timedelta,
+    timezone,
 )
 from typing import (
     Any,
@@ -61,7 +62,7 @@ class NotificationsIntegrationBase(IntegrationTestCase):
         user1 = self._create_test_user()
         user2 = self._create_test_user()
 
-        before_creating_notifications = datetime.utcnow()
+        before_creating_notifications = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # Only user1 will receive this notification
         subject1 = f"notification_{uuid4()}"
@@ -81,7 +82,7 @@ class NotificationsIntegrationBase(IntegrationTestCase):
         created_response_3 = self._send_broadcast_notification("test_notification_status 3")
         assert created_response_3["total_notifications_sent"] == 1
 
-        after_creating_notifications = datetime.utcnow()
+        after_creating_notifications = datetime.now(timezone.utc).replace(tzinfo=None)
 
         # The default user should have received only the broadcasted notifications
         status = self._get_notifications_status_since(before_creating_notifications)
@@ -158,7 +159,7 @@ class NotificationsIntegrationBase(IntegrationTestCase):
         user1 = self._create_test_user()
         user2 = self._create_test_user()
 
-        before_creating_notifications = datetime.utcnow()
+        before_creating_notifications = datetime.now(timezone.utc).replace(tzinfo=None)
 
         subject = f"notification_{uuid4()}"
         created_response = self._send_test_notification_to(
@@ -265,8 +266,9 @@ class NotificationsIntegrationBase(IntegrationTestCase):
         assert updated_response["source"] == "updated_source"
 
     def test_admins_get_all_broadcasted_even_inactive(self):
-        tomorrow = datetime.utcnow() + timedelta(days=1)
-        yesterday = datetime.utcnow() - timedelta(days=1)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        tomorrow = now + timedelta(days=1)
+        yesterday = now - timedelta(days=1)
         self._send_broadcast_notification(subject="Active")
         self._send_broadcast_notification(subject="Scheduled", publication_time=tomorrow)
         self._send_broadcast_notification(subject="Expired", expiration_time=yesterday)

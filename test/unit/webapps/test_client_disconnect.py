@@ -80,7 +80,7 @@ def setup_fastAPI():
 def test_client_disconnect(reset_global_vars):
     app = setup_fastAPI()
     port = sockets.unused_port()
-    server = Server(config=uvicorn.Config(app=app, host="127.0.0.1", port=port))
+    server = Server(config=uvicorn.Config(app=app, host="127.0.0.1", port=port, ws="none"))
     with server.run_in_thread():
         try:
             requests.get(f"http://127.0.0.1:{port}/", timeout=0.1)
