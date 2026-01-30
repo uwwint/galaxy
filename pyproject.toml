@@ -14,7 +14,7 @@ requires-python = ">=3.10"
 dependencies = [
     "a2wsgi",
     "aiofiles",
-    "alembic",
+    "alembic>=1.18.1",
     "apispec",
     "Babel",
     "bdbag>=1.6.3",
@@ -81,7 +81,7 @@ dependencies = [
     "PyJWT",
     "pykwalify",
     "pylibmagic",
-    "pyparsing>=3.0.0",
+    "pyparsing>=3.3.2",
     "pypng",
     "pysam>=0.21",  # for Python 3.11 support on macOS
     "python-dateutil",
@@ -99,7 +99,7 @@ dependencies = [
     "slowapi",
     "social-auth-core>=4.5.0",  # to drop dependency on abandoned python-jose
     "sortedcontainers",
-    "SQLAlchemy>=2.0.37,<2.1,!=2.0.41",  # https://github.com/sqlalchemy/sqlalchemy/issues/12019 , https://github.com/sqlalchemy/sqlalchemy/issues/12600
+    "SQLAlchemy>=2.0.46,<2.1,!=2.0.41",  # https://github.com/sqlalchemy/sqlalchemy/issues/12019 , https://github.com/sqlalchemy/sqlalchemy/issues/12600
     "sqlparse",
     "starlette",
     "starlette-context",
@@ -136,6 +136,7 @@ test = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "pytest-xdist",
     "pytest-html",
     "pytest-httpserver",
     "python-irodsclient!=1.1.2",  # https://github.com/irods/python-irodsclient/issues/356
