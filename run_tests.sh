@@ -325,6 +325,7 @@ exists() {
 debug=""
 test_script="pytest"
 report_file="run_functional_tests.html"
+parallel_args=("-n" "auto" "--dist=loadfile")
 if [ -n "$GALAXY_TEST_COVERAGE" ]; then
     coverage_arg="--with-coverage"
 else
@@ -597,6 +598,10 @@ do
           skip_common_startup=1
           shift
           ;;
+      --no-parallel)
+          parallel_args=()
+          shift
+          ;;
       --)
           # Do not default to running the functional tests in this case, caller
           # is opting to run specific tests so don't interfere with that by default.
@@ -688,6 +693,9 @@ else
     marker_args=()
 fi
 args=(-v $debug $structured_data_args --html "$report_file" --self-contained-html $coverage_arg $xunit_args $extra_args "${marker_args[@]}" "$@")
+if [ ${#parallel_args[@]} -ne 0 ]; then
+    args+=("${parallel_args[@]}")
+fi
 "$test_script" "${args[@]}"
 exit_status=$?
 echo "Testing complete. HTML report is in \"$report_file\"." 1>&2
