@@ -50,8 +50,8 @@ class TestException(NamedTuple):
     was_recorded: bool
 
 
-TestReference.__test__ = False
-TestException.__test__ = False
+setattr(TestReference, "__test__", False)
+setattr(TestException, "__test__", False)
 
 
 class Results:
