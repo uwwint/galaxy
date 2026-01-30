@@ -426,6 +426,8 @@ do
           ;;
       -t|-toolshed|--toolshed)
           report_file="run_toolshed_tests.html"
+          # Tool shed tests start Galaxy + DB; running in parallel can race database creation.
+          parallel_args=()
           if [ $# -gt 1 ]; then
               toolshed_script=$2
               shift 2
