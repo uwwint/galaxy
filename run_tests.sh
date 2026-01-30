@@ -203,6 +203,7 @@ Extra options:
                        be used, and reported on stderr at the end of the run.
  --xunit_report_file   Path of XUnit report to produce (for Python Galaxy
                        functional tests).
+ --no-parallel         Disable pytest-xdist parallel execution.
  --skip-venv           Do not create .venv (passes this flag to
                        common_startup.sh)
  --external_url        External URL to use for Galaxy testing (only certain
