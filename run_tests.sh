@@ -414,6 +414,8 @@ do
           export GALAXY_TEST_DRIVER_BACKEND
           report_file="./run_playwright_tests.html"
           skip_client_build=""
+          # Playwright tests start Galaxy + DB; running in parallel can race database creation.
+          parallel_args=()
           if [ $# -gt 1 ]; then
               selenium_script=$2
               shift 2
