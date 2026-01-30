@@ -15,7 +15,6 @@ from concurrent.futures import (
 from typing import (
     Any,
     Callable,
-    ClassVar,
     Dict,
     List,
     NamedTuple,
@@ -39,22 +38,19 @@ ALL_VERSION = "*"
 LATEST_VERSION = None
 
 
-class TestReference(NamedTuple):
-    __test__: ClassVar[bool] = False
+class ToolTestReference(NamedTuple):
     tool_id: str
     tool_version: Optional[str]
     test_index: int
 
 
-class TestException(NamedTuple):
-    __test__: ClassVar[bool] = False
+class ToolTestException(NamedTuple):
     tool_id: str
     exception: Exception
     was_recorded: bool
 
-
 class Results:
-    test_exceptions: List[TestException]
+    test_exceptions: List[ToolTestException]
 
     def __init__(
         self, default_suitename: str, test_json: str, append: bool = False, galaxy_url: Optional[str] = None
@@ -78,10 +74,10 @@ class Results:
     def register_result(self, result: Dict[str, Any]) -> None:
         self.test_results.append(result)
 
-    def register_exception(self, test_exception: TestException) -> None:
+    def register_exception(self, test_exception: ToolTestException) -> None:
         self.test_exceptions.append(test_exception)
 
-    def already_successful(self, test_reference: TestReference) -> bool:
+    def already_successful(self, test_reference: ToolTestReference) -> bool:
         test_data = self._previous_test_data(test_reference)
         if test_data:
             if "status" in test_data and test_data["status"] == "success":
@@ -89,7 +85,7 @@ class Results:
 
         return False
 
-    def already_executed(self, test_reference: TestReference) -> bool:
+    def already_executed(self, test_reference: ToolTestReference) -> bool:
         test_data = self._previous_test_data(test_reference)
         if test_data:
             if "status" in test_data and test_data["status"] != "skipped":
@@ -97,7 +93,7 @@ class Results:
 
         return False
 
-    def _previous_test_data(self, test_reference: TestReference) -> Optional[Dict[str, Any]]:
+    def _previous_test_data(self, test_reference: ToolTestReference) -> Optional[Dict[str, Any]]:
         test_id = _test_id_for_reference(test_reference)
         for test_result in self.test_results:
             if test_result.get("id") != test_id:
@@ -166,7 +162,7 @@ class Results:
 
 def test_tools(
     galaxy_interactor: GalaxyInteractorApi,
-    test_references: List[TestReference],
+    test_references: List[ToolTestReference],
     results: Results,
     log: Optional[logging.Logger] = None,
     parallel_tests: int = 1,
@@ -238,7 +234,7 @@ def test_tools(
                 galaxy_interactor.delete_history(test_history)
 
 
-def _test_id_for_reference(test_reference: "TestReference") -> str:
+def _test_id_for_reference(test_reference: "ToolTestReference") -> str:
     tool_id = test_reference.tool_id
     tool_version = test_reference.tool_version
     test_index = test_reference.test_index
@@ -256,7 +252,7 @@ def _test_id_for_reference(test_reference: "TestReference") -> str:
 
 def _test_tool(
     executor: concurrent.futures.thread.ThreadPoolExecutor,
-    test_reference: "TestReference",
+    test_reference: "ToolTestReference",
     results: Results,
     galaxy_interactor: GalaxyInteractorApi,
     log: Optional[logging.Logger],
@@ -318,7 +314,7 @@ def _test_tool(
                 )
             if job_exception is not None:
                 was_recorded = job_data is not None
-                test_exception = TestException(tool_id, job_exception, was_recorded)
+                test_exception = ToolTestException(tool_id, job_exception, was_recorded)
                 results.register_exception(test_exception)
 
     executor.submit(run_test)
@@ -331,16 +327,16 @@ def build_case_references(
     test_index: int = ALL_TESTS,
     page_size: int = 0,
     page_number: int = 0,
-    test_filters: Optional[List[Callable[[TestReference], bool]]] = None,
+    test_filters: Optional[List[Callable[[ToolTestReference], bool]]] = None,
     log: Optional[logging.Logger] = None,
-) -> List[TestReference]:
-    test_references: List[TestReference] = []
+) -> List[ToolTestReference]:
+    test_references: List[ToolTestReference] = []
     if tool_id == ALL_TOOLS:
         tests_summary = galaxy_interactor.get_tests_summary()
         for tool_id, tool_versions_dict in tests_summary.items():
             for tool_version, summary in tool_versions_dict.items():
                 for test_index in range(summary["count"]):
-                    test_reference = TestReference(tool_id, tool_version, test_index)
+                    test_reference = ToolTestReference(tool_id, tool_version, test_index)
                     test_references.append(test_reference)
     else:
         assert tool_id
@@ -351,11 +347,11 @@ def build_case_references(
             this_tool_version = tool_test_dict.get("tool_version") or tool_version
             this_test_index = i
             if test_index == ALL_TESTS or i == test_index:
-                test_reference = TestReference(tool_id, this_tool_version, this_test_index)
+                test_reference = ToolTestReference(tool_id, this_tool_version, this_test_index)
                 test_references.append(test_reference)
 
     if test_filters is not None and len(test_filters) > 0:
-        filtered_test_references: List[TestReference] = []
+        filtered_test_references: List[ToolTestReference] = []
         for test_reference in test_references:
             skip_test = False
             for test_filter in test_filters:
@@ -393,7 +389,7 @@ def main(argv=None) -> None:
 
 def run_tests(
     args: argparse.Namespace,
-    test_filters: Optional[List[Callable[[TestReference], bool]]] = None,
+    test_filters: Optional[List[Callable[[ToolTestReference], bool]]] = None,
     log: Optional[logging.Logger] = None,
 ) -> None:
     # Split out argument parsing so we can quickly build other scripts - such as a script
