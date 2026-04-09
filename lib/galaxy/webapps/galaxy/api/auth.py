@@ -18,10 +18,7 @@ from galaxy.exceptions import (
 )
 from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
 from galaxy.managers.users import UserManager
-from galaxy.model import (
-    AuthSession,
-    User,
-)
+from galaxy.model import AuthSession, User
 from galaxy.security.validate_user_input import (
     validate_email,
     validate_publicname,
@@ -31,7 +28,6 @@ from galaxy.webapps.galaxy.api import (
     DependsOnTrans,
     Router,
 )
-from galaxy.webapps.base.webapp import create_new_session
 from galaxy.work.context import SessionRequestContext
 
 router = Router(tags=["auth"])
@@ -92,51 +88,6 @@ def _clear_refresh_cookie(trans: SessionRequestContext) -> None:
     )
 
 
-def _set_legacy_session_cookie(trans: SessionRequestContext, galaxy_session) -> None:
-    session_cookie = util.unicodify(trans.security.encode_guid(galaxy_session.session_key))
-    if hasattr(trans, "set_cookie"):
-        trans.set_cookie(session_cookie, name="galaxysession", path=_cookie_path(trans))
-        return
-    trans.response.set_cookie(
-        key="galaxysession",
-        value=session_cookie,
-        max_age=3600 * 24 * 90,
-        path=_cookie_path(trans),
-        domain=_cookie_domain(trans),
-        secure=trans.request.is_secure,
-        httponly=True,
-        samesite="lax",
-    )
-
-
-def _rotate_legacy_galaxy_session(trans: SessionRequestContext, *, logout_all: bool = False) -> None:
-    galaxy_session = trans.galaxy_session
-    if galaxy_session is None:
-        return
-    galaxy_session.is_valid = False
-    new_galaxy_session = trans.app.model.GalaxySession(
-        session_key=trans.security.get_new_guid(),
-        is_valid=True,
-        remote_host=_request_remote_host(trans),
-        remote_addr=_request_remote_addr(trans),
-        referer=_request_headers(trans).get("Referer", None),
-        prev_session_id=galaxy_session.id,
-    )
-    trans.sa_session.add_all((galaxy_session, new_galaxy_session))
-    if logout_all and galaxy_session.user_id is not None:
-        stmt = trans.sa_session.query(trans.app.model.GalaxySession).filter(
-            trans.app.model.GalaxySession.user_id == galaxy_session.user_id,
-            trans.app.model.GalaxySession.is_valid.is_(True),
-            trans.app.model.GalaxySession.id != galaxy_session.id,
-        )
-        for other_galaxy_session in stmt:
-            other_galaxy_session.is_valid = False
-            trans.sa_session.add(other_galaxy_session)
-    trans.sa_session.commit()
-    trans.galaxy_session = new_galaxy_session
-    _set_legacy_session_cookie(trans, new_galaxy_session)
-
-
 def _serialize_user(trans: SessionRequestContext, user: Optional[User]) -> Optional[dict[str, str]]:
     if user is None:
         return None
@@ -188,7 +139,7 @@ def _ensure_browser_auth_session(trans: SessionRequestContext) -> Optional[AuthS
     current_auth_session = trans.auth_session
     if current_auth_session is not None:
         return current_auth_session
-    if trans.user is None or trans.galaxy_session is None or trans.auth_source == "remote_user":
+    if trans.user is None or trans.auth_source == "remote_user":
         return None
     auth_session = trans.app.auth_session_manager.create_session(
         user=trans.user,
@@ -213,17 +164,6 @@ def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> No
                 history, dataset=True, bypass_manage_permission=True
             )
         trans.sa_session.add(history)
-    if trans.galaxy_session is None:
-        trans.galaxy_session = create_new_session(trans, user_for_new_session=user)
-        trans.sa_session.add(trans.galaxy_session)
-        _set_legacy_session_cookie(trans, trans.galaxy_session)
-    if trans.galaxy_session is not None:
-        trans.galaxy_session.user = user
-        if history is not None:
-            trans.galaxy_session.current_history = history
-            if history not in trans.galaxy_session.histories:
-                trans.galaxy_session.add_history(history)
-        trans.sa_session.add(trans.galaxy_session)
     trans.set_user_context(user)
 
 
@@ -495,10 +435,7 @@ def logout(trans: SessionRequestContext = DependsOnTrans, logout_all: bool = Fal
             trans.app.auth_session_manager.invalidate_sessions_for_user(
                 auth_session.user, exclude_auth_session_id=auth_session.id
             )
-    if trans.galaxy_session is not None:
-        _rotate_legacy_galaxy_session(trans, logout_all=logout_all)
-    else:
-        trans.sa_session.commit()
+    trans.sa_session.commit()
     trans.auth_session = None
     trans.clear_user_context()
     trans._auth_source = "anonymous"

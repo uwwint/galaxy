@@ -126,12 +126,9 @@ def test_bootstrap_creates_auth_session_from_legacy_session():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
     history = model.History(user=user)
-    galaxy_session = model.GalaxySession(session_key="a" * 32, is_valid=True)
-    galaxy_session.user = user
-    galaxy_session.current_history = history
-    app.model.session.add_all((history, galaxy_session))
+    app.model.session.add(history)
     app.model.session.commit()
-    trans = _build_trans(app, user=user, history=history, galaxy_session=galaxy_session, auth_source="session")
+    trans = _build_trans(app, user=user, history=history, auth_source="galaxy_token")
 
     payload = bootstrap(trans=trans)
 
@@ -161,11 +158,9 @@ def test_login_issues_browser_auth_state():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
     history = model.History()
-    galaxy_session = model.GalaxySession(session_key="a" * 32, is_valid=True)
-    galaxy_session.current_history = history
-    app.model.session.add_all((history, galaxy_session))
+    app.model.session.add(history)
     app.model.session.commit()
-    trans = _build_trans(app, history=history, galaxy_session=galaxy_session, auth_source="session")
+    trans = _build_trans(app, history=history, auth_source="anonymous")
 
     response = login(trans=trans, payload={"login": "user", "password": "password"})
 
@@ -272,19 +267,9 @@ def test_login_resends_activation_email_outside_grace_period():
 def test_logout_invalidates_current_auth_session_and_clears_cookie():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
-    galaxy_session = model.GalaxySession(session_key="a" * 32, is_valid=True)
-    galaxy_session.user = user
-    app.model.session.add(galaxy_session)
-    app.model.session.commit()
     auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
     app.auth_session_manager.issue_refresh_token(auth_session)
-    trans = _build_trans(
-        app,
-        user=user,
-        auth_session=auth_session,
-        galaxy_session=galaxy_session,
-        auth_source="galaxy_token",
-    )
+    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
 
     response = logout(trans=trans)
 
@@ -292,7 +277,3 @@ def test_logout_invalidates_current_auth_session_and_clears_cookie():
     refreshed = app.auth_session_manager.get_session_by_id(auth_session.id)
     assert refreshed is None
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME) == ""
-    assert _cookie_value(trans, "galaxysession")
-    assert trans.galaxy_session is not None
-    assert trans.galaxy_session.id != galaxy_session.id
-    assert trans.galaxy_session.user is None

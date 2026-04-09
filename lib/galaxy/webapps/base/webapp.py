@@ -473,6 +473,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
     def get_user(self):
         """Return the current user if logged in or None."""
         user = self.__user
+        if not user and self.auth_session:
+            user = self.auth_session.user
         if not user and self.galaxy_session:
             user = self.galaxy_session.user
             self.__user = user
@@ -958,7 +960,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             return None
         if self.auth_session is not None:
             self.auth_session_manager.invalidate_session(self.auth_session)
-        current_history = self.galaxy_session.current_history if self.galaxy_session else None
+        current_history = self.history
         auth_session = self.auth_session_manager.create_session(
             user=user,
             auth_source=auth_source,
@@ -998,6 +1000,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         None is a valid response.
         """
         history = None
+        if self.auth_session and hasattr(self.auth_session, "current_history"):
+            history = self.auth_session.current_history
         if self.galaxy_session:
             if hasattr(self.galaxy_session, "current_history"):
                 history = self.galaxy_session.current_history
@@ -1008,8 +1012,12 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         return history
 
     def set_history(self, history):
+        if history and not history.deleted and self.auth_session:
+            self.auth_session.current_history = history
         if history and not history.deleted and self.galaxy_session:
             self.galaxy_session.current_history = history
+        if self.auth_session:
+            self.sa_session.add(self.auth_session)
         self.sa_session.add(self.galaxy_session)
         self.sa_session.commit()
 
