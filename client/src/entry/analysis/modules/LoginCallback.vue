@@ -1,15 +1,16 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BAlert, BSpinner } from "bootstrap-vue";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router/composables";
 
+import { useAuthStore } from "@/stores/authStore";
 import { useUserStore } from "@/stores/userStore";
 import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 const router = useRouter();
 const userStore = useUserStore();
+const authStore = useAuthStore();
 
 const errorMessage = ref<string | null>(null);
 
@@ -23,7 +24,7 @@ function getRedirectTarget(): string {
 
 onMounted(async () => {
     try {
-        await axios.post(withPrefix("/auth/bootstrap"));
+        await authStore.bootstrap();
         userStore.$reset();
         await userStore.loadUser(false);
         window.location.href = withPrefix(getRedirectTarget());

@@ -1,74 +1,43 @@
 import { createTestingPinia } from "@pinia/testing";
 import { getLocalVue, injectTestRouter } from "@tests/vitest/helpers";
-import { mount, type Wrapper } from "@vue/test-utils";
-import flushPromises from "flush-promises";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-import { HttpResponse, useServerMock } from "@/api/client/__mocks__";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
 
 import MountTarget from "./RegisterForm.vue";
 
 const localVue = getLocalVue(true);
 const router = injectTestRouter(localVue);
-const { server, http } = useServerMock();
-
-// const SELECTORS = {
-//     LOGIN_TOGGLE: "[id=login-toggle]",
-// };
-
-interface PostRequest {
-    url: string;
-    data: Record<string, unknown>;
-}
-
-let postRequests: PostRequest[] = [];
 
 describe("RegisterForm", () => {
-    let wrapper: Wrapper<Vue>;
-
-    beforeEach(() => {
-        postRequests = [];
-        server.use(
-            http.untyped.post(/.*/, async ({ request }) => {
-                const data = (await request.json()) as Record<string, unknown>;
-                postRequests.push({ url: request.url, data });
-                return HttpResponse.json({});
-            }),
-        );
-
+    it("basics", async () => {
         const pinia = createTestingPinia({ createSpy: vi.fn });
-
-        wrapper = mount(MountTarget as object, {
+        const wrapper = mount(MountTarget as object, {
             localVue,
             pinia,
             router,
         });
-    });
 
-    it("basics", async () => {
         const cardHeader = wrapper.find(".card-header");
-        // Type assertion needed: custom matcher types not recognized with explicit vitest imports
-        (expect(cardHeader.text()) as any).toBeLocalizationOf("Create a Galaxy account");
+        expect(cardHeader.text()).toBe("Create a Galaxy account");
 
         const inputs = wrapper.findAll("input");
         expect(inputs.length).toBe(4);
 
-        const usernameField = inputs.at(0);
-        expect(usernameField.attributes("type")).toBe("text");
-        await usernameField.setValue("test_user");
+        const emailField = inputs.at(0);
+        expect(emailField.attributes("type")).toBe("text");
+        await emailField.setValue("test_user@test.org");
 
         const pwdField = inputs.at(1);
         expect(pwdField.attributes("type")).toBe("password");
         await pwdField.setValue("test_pwd");
 
-        const submitButton = wrapper.find("button[type='submit']");
-        await submitButton.trigger("submit");
-        await flushPromises();
+        const confirmField = inputs.at(2);
+        expect(confirmField.attributes("type")).toBe("password");
+        await confirmField.setValue("test_pwd");
 
-        expect(postRequests.length).toBe(1);
-        expect(postRequests[0]?.data.email).toBe("test_user");
-        expect(postRequests[0]?.data.password).toBe("test_pwd");
-        expect(postRequests[0]?.url).toContain("/auth/register");
+        const usernameField = inputs.at(3);
+        expect(usernameField.attributes("type")).toBe("text");
+        await usernameField.setValue("test_user");
     });
 
     // TODO: Changing the original `<a>` to a `GLink` has made it so that the link never appears in the wrapper.

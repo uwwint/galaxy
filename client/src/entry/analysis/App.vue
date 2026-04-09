@@ -59,6 +59,7 @@ import { setGlobalUploadModal } from "@/composables/globalUploadModal";
 import { useRouteQueryBool } from "@/composables/route";
 import { setToastComponentRef } from "@/composables/toast";
 import { getAppRoot } from "@/onload";
+import { useAuthStore } from "@/stores/authStore";
 import { useEntryPointStore } from "@/stores/entryPointStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useNotificationsStore } from "@/stores/notificationsStore";
@@ -94,6 +95,7 @@ export default {
         const { currentTour } = storeToRefs(tourStore);
 
         const userStore = useUserStore();
+        const authStore = useAuthStore();
         const { currentTheme } = storeToRefs(userStore);
 
         const toastRef = ref(null);
@@ -113,9 +115,18 @@ export default {
             () => embedded.value,
             () => {
                 if (embedded.value) {
+                    authStore.clearAuthState();
                     userStore.$reset();
                 } else {
-                    userStore.loadUser();
+                    void (async () => {
+                        try {
+                            await authStore.bootstrap();
+                        } catch {
+                            // Bootstrap failures should not block anonymous app rendering.
+                        } finally {
+                            await userStore.loadUser();
+                        }
+                    })();
                 }
             },
             { immediate: true },

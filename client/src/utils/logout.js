@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { getGalaxyInstance } from "@/app";
+import { useAuthStore } from "@/stores/authStore";
 import { withPrefix } from "@/utils/redirect";
 
 /**
@@ -9,24 +10,23 @@ import { withPrefix } from "@/utils/redirect";
  * configured redirect). */
 export function userLogout(logoutAll = false) {
     const Galaxy = getGalaxyInstance();
+    const authStore = useAuthStore();
     const post_user_logout_href = Galaxy.config.post_user_logout_href;
-    axios
-        .post(withPrefix("/auth/logout"), null, { params: { logout_all: logoutAll } })
+    authStore
+        .logout(logoutAll)
         .then((response) => {
             if (Galaxy.user) {
                 Galaxy.user.clearSessionStorage();
             }
-            // Check if we need to logout of OIDC IDP
             if (Galaxy.config.enable_oidc) {
                 return axios.get(withPrefix("/authnz/logout"));
-            } else {
-                // Otherwise pass through the initial logout response
-                return response;
             }
+            return response;
         })
         .then((response) => {
-            if (response.data?.redirect_uri) {
-                window.top.location.href = response.data.redirect_uri;
+            const redirectUri = response.redirect_uri || response.data?.redirect_uri;
+            if (redirectUri) {
+                window.top.location.href = redirectUri;
             } else {
                 window.top.location.href = withPrefix(post_user_logout_href);
             }
@@ -44,6 +44,8 @@ export function userLogoutAll() {
  * subsequent navigation after the deletion API request would fail otherwise */
 export function userLogoutClient() {
     const Galaxy = getGalaxyInstance();
+    const authStore = useAuthStore();
+    authStore.clearAuthState();
     Galaxy.user?.clearSessionStorage();
     const post_user_logout_href = Galaxy.config.post_user_logout_href;
     window.top.location.href = withPrefix(post_user_logout_href);

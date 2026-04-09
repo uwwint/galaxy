@@ -10,10 +10,6 @@ import Login from "./Login.vue";
 
 const localVue = getLocalVue(true);
 
-vi.mock("@/app/index", () => ({
-    getGalaxyInstance: vi.fn(() => ({ session_csrf_token: "session_csrf_token" })),
-}));
-
 vi.mock("@/composables/config");
 
 beforeEach(() => {
@@ -61,7 +57,6 @@ describe("Login", () => {
         expect(attributes.enableoidc).toBe("true");
         expect(attributes.redirect).toBe("redirect_url");
         expect(attributes.registrationwarningmessage).toBe("registration_warning_message");
-        expect(attributes.sessioncsrftoken).toBe("session_csrf_token");
         expect(attributes.showwelcomewithlogin).toBe("true");
         expect(attributes.termsurl).toBe("terms_url");
         expect(attributes.welcomeurl).toBe("welcome_url");

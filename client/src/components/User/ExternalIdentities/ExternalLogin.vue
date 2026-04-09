@@ -150,13 +150,22 @@ async function getCILogonIdps() {
 
 function setIdpPreference() {
     if (rememberIdp.value && selected.value) {
+        if (typeof localStorage === "undefined" || typeof localStorage.setItem !== "function") {
+            return;
+        }
         localStorage.setItem("galaxy-remembered-idp", selected.value.EntityID);
     } else {
+        if (typeof localStorage === "undefined" || typeof localStorage.removeItem !== "function") {
+            return;
+        }
         localStorage.removeItem("galaxy-remembered-idp");
     }
 }
 
 function getIdpPreference() {
+    if (typeof localStorage === "undefined" || typeof localStorage.getItem !== "function") {
+        return null;
+    }
     return localStorage.getItem("galaxy-remembered-idp");
 }
 </script>

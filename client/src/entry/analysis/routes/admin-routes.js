@@ -74,7 +74,6 @@ export default [
                         registrationWarningMessage: Galaxy.config.registration_warning_message,
                         mailingJoinAddr: Galaxy.config.mailing_join_addr,
                         serverMailConfigured: Galaxy.config.server_mail_configured,
-                        sessionCsrfToken: Galaxy.session_csrf_token,
                     };
                 },
             },

@@ -15,6 +15,7 @@ import {
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router/composables";
 
+import { useAuthStore } from "@/stores/authStore";
 import localize from "@/utils/localization";
 import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
@@ -47,6 +48,7 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const router = useRouter();
+const authStore = useAuthStore();
 
 const urlParams = new URLSearchParams(window.location.search);
 
@@ -70,8 +72,21 @@ const excludeIdps = computed(() => (connectExternalProvider.value ? [connectExte
  */
 const loginColumnDisplay = computed(() => Boolean(props.showWelcomeWithLogin && props.welcomeUrl));
 
+function getStoredRedirectUrl(): string | null {
+    if (typeof localStorage === "undefined" || typeof localStorage.getItem !== "function") {
+        return null;
+    }
+    return localStorage.getItem("redirect_url");
+}
+
+function setStoredRedirectUrl(url: string) {
+    if (typeof localStorage === "undefined" || typeof localStorage.setItem !== "function") {
+        return;
+    }
+    localStorage.setItem("redirect_url", url);
+}
+
 async function submitLogin() {
-    let redirect: string | null;
     passwordState.value = null;
     loading.value = true;
 
@@ -79,33 +94,25 @@ async function submitLogin() {
         login.value = connectExternalEmail.value;
     }
 
-    if (localStorage.getItem("redirect_url")) {
-        redirect = localStorage.getItem("redirect_url");
-    } else {
-        redirect = props.redirect ?? null;
-    }
+    const redirect = getStoredRedirectUrl() || props.redirect || null;
 
     try {
-        const response = await axios.post(withPrefix("/auth/login"), {
+        const response = await authStore.login({
             login: login.value,
             password: password.value,
             redirect: redirect,
         });
 
-        if (response.data?.err_msg) {
-            throw new Error(response.data.err_msg);
+        if (response.message && response.status) {
+            alert(response.message);
         }
 
-        if (response.data.message && response.data.status) {
-            alert(response.data.message);
-        }
-
-        if (response.data.expired_user) {
-            window.location.href = withPrefix(`/root/login?expired_user=${response.data.expired_user}`);
+        if (response.expired_user) {
+            window.location.href = withPrefix(`/root/login?expired_user=${response.expired_user}`);
         } else if (connectExternalProvider.value) {
             window.location.href = withPrefix("/user/external_ids?connect_external=true");
-        } else if (response.data.redirect) {
-            window.location.href = withPrefix(encodeURI(response.data.redirect));
+        } else if (response.redirect) {
+            window.location.href = withPrefix(encodeURI(response.redirect));
         } else {
             window.location.href = withPrefix("/");
         }
@@ -126,7 +133,7 @@ async function submitLogin() {
 }
 
 function setRedirect(url: string) {
-    localStorage.setItem("redirect_url", url);
+    setStoredRedirectUrl(url);
 }
 
 async function resetLogin() {

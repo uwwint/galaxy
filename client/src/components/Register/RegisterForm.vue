@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import axios from "axios";
 import {
     BAlert,
     BCard,
@@ -16,6 +15,7 @@ import { computed, type Ref, ref } from "vue";
 
 import { getOIDCIdpsWithRegistration, type OIDCConfig } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { Toast } from "@/composables/toast";
+import { useAuthStore } from "@/stores/authStore";
 import localize from "@/utils/localization";
 import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
@@ -41,6 +41,7 @@ interface Props {
 }
 
 const props = defineProps<Props>();
+const authStore = useAuthStore();
 
 const email = ref(null);
 const confirm = ref(null);
@@ -72,7 +73,7 @@ async function submit() {
     disableCreate.value = true;
 
     try {
-        const response = await axios.post(withPrefix("/auth/register"), {
+        const response = await authStore.register({
             email: email.value,
             username: username.value,
             password: password.value,
@@ -80,12 +81,8 @@ async function submit() {
             subscribe: subscribe.value,
         });
 
-        if (response.data?.err_msg) {
-            throw new Error(response.data.err_msg);
-        }
-
-        if (response.data.message && response.data.status) {
-            Toast.info(response.data.message);
+        if (response.message && response.status) {
+            Toast.info(response.message);
         }
 
         window.location.href = props.redirect ? withPrefix(props.redirect) : withPrefix("/");

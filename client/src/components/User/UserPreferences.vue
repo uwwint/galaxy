@@ -19,12 +19,12 @@ import {
 } from "font-awesome-6";
 import { computed, onMounted, ref } from "vue";
 
-import { getGalaxyInstance } from "@/app";
 import { hasSingleOidcProfile, type OIDCConfig } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { getUserPreferencesModel } from "@/components/User/UserPreferencesModel";
 import { useConfig } from "@/composables/config";
 import { useConfirmDialog } from "@/composables/confirmDialog";
 import { useToast } from "@/composables/toast";
+import { useAuthStore } from "@/stores/authStore";
 import { useFileSourceTemplatesStore } from "@/stores/fileSourceTemplatesStore";
 import { useObjectStoreTemplatesStore } from "@/stores/objectStoreTemplatesStore";
 import localize from "@/utils/localization";
@@ -52,6 +52,7 @@ const { config, isConfigLoaded } = useConfig(true);
 
 const objectStoreTemplatesStore = useObjectStoreTemplatesStore();
 const fileSourceTemplatesStore = useFileSourceTemplatesStore();
+const authStore = useAuthStore();
 
 const Toast = useToast();
 
@@ -80,8 +81,7 @@ const showOidcProfile = computed<boolean>(() => {
 });
 const hasLogout = computed(() => {
     if (isConfigLoaded.value) {
-        const Galaxy = getGalaxyInstance();
-        return !!Galaxy.session_csrf_token && !config.value.single_user;
+        return authStore.hasActiveAuthToken() && !config.value.single_user;
     } else {
         return false;
     }
