@@ -5,6 +5,7 @@ Mock infrastructure for testing ModelManagers.
 import os
 import shutil
 import tempfile
+from http.cookies import SimpleCookie
 from typing import (
     Any,
     cast,
@@ -349,9 +350,41 @@ class MockTrans:
             is_body_readable=False,
             host="request.host",
             host_url="request.host_url",
+            remote_host="request.remote_host",
+            remote_addr="request.remote_addr",
+            environ={"wsgi.url_scheme": "http", "REMOTE_HOST": "request.remote_host", "REMOTE_ADDR": "request.remote_addr"},
             url_path="mock/url/path",
         )
-        self.response: Any = Bunch(headers={}, set_content_type=lambda i: None)
+        response_cookies = SimpleCookie()
+
+        def set_cookie(
+            key,
+            value="",
+            max_age=None,
+            expires=None,
+            path="/",
+            domain=None,
+            secure=False,
+            httponly=False,
+            samesite="lax",
+        ):
+            response_cookies[key] = value
+            morsel = response_cookies[key]
+            if max_age is not None:
+                morsel["max-age"] = str(max_age)
+            if expires is not None:
+                morsel["expires"] = expires
+            morsel["path"] = path
+            if domain is not None:
+                morsel["domain"] = domain
+            if secure:
+                morsel["secure"] = True
+            if httponly:
+                morsel["httponly"] = True
+            if samesite is not None:
+                morsel["samesite"] = samesite
+
+        self.response: Any = Bunch(headers={}, status="200 OK", cookies=response_cookies, set_content_type=lambda i: None, set_cookie=set_cookie)
 
     @property
     def tag_handler(self):

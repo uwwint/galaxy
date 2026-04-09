@@ -46,11 +46,50 @@ def _request_headers(trans: SessionRequestContext) -> Any:
 
 
 def _request_remote_host(trans: SessionRequestContext) -> Optional[str]:
-    return trans.request.remote_host
+    if hasattr(trans.request, "get"):
+        remote_host = trans.request.get("remote_host", None) or trans.request.get("REMOTE_HOST", None)
+        if remote_host:
+            return remote_host
+        remote_addr = trans.request.get("remote_addr", None) or trans.request.get("REMOTE_ADDR", None)
+        if remote_addr:
+            return remote_addr
+    request_environ = getattr(trans.request, "environ", None)
+    if request_environ is not None:
+        remote_host = request_environ.get("REMOTE_HOST")
+        if remote_host:
+            return remote_host
+        remote_addr = request_environ.get("REMOTE_ADDR")
+        if remote_addr:
+            return remote_addr
+    try:
+        return trans.request.remote_host
+    except AttributeError:
+        return None
 
 
 def _request_remote_addr(trans: SessionRequestContext) -> Optional[str]:
-    return trans.request.remote_addr
+    if hasattr(trans.request, "get"):
+        remote_addr = trans.request.get("remote_addr", None) or trans.request.get("REMOTE_ADDR", None)
+        if remote_addr:
+            return remote_addr
+    request_environ = getattr(trans.request, "environ", None)
+    if request_environ is not None:
+        remote_addr = request_environ.get("REMOTE_ADDR")
+        if remote_addr:
+            return remote_addr
+    try:
+        return trans.request.remote_addr
+    except AttributeError:
+        return None
+
+
+def _request_is_secure(trans: SessionRequestContext) -> bool:
+    if hasattr(trans.request, "is_secure"):
+        return bool(trans.request.is_secure)
+    request_environ = getattr(trans.request, "environ", None)
+    if request_environ is not None:
+        return request_environ.get("wsgi.url_scheme") == "https"
+    return False
 
 
 def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expires_at: Optional[datetime]) -> None:
@@ -66,7 +105,7 @@ def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expire
         max_age=max_age,
         path=_cookie_path(trans),
         domain=_cookie_domain(trans),
-        secure=trans.request.is_secure,
+        secure=_request_is_secure(trans),
         httponly=True,
         samesite="lax",
     )
@@ -82,7 +121,7 @@ def _clear_refresh_cookie(trans: SessionRequestContext) -> None:
         max_age=0,
         path=_cookie_path(trans),
         domain=_cookie_domain(trans),
-        secure=trans.request.is_secure,
+        secure=_request_is_secure(trans),
         httponly=True,
         samesite="lax",
     )
@@ -125,10 +164,14 @@ def _error_payload(message: str, *, status: Optional[str] = None, **kwd: Any) ->
 
 def _bootstrap_payload(trans: SessionRequestContext, access_token: Optional[str]) -> dict[str, Any]:
     history = trans.history
+    try:
+        auth_source = trans.auth_source
+    except AttributeError:
+        auth_source = trans.__dict__.get("_auth_source", "unknown")
     return {
         "authenticated": trans.user is not None,
         "access_token": access_token,
-        "auth_source": trans.auth_source,
+        "auth_source": auth_source,
         "user": _serialize_user(trans, trans.user),
         "actor_user": _serialize_user(trans, trans.actor_user),
         "current_history_id": trans.security.encode_id(history.id) if history else None,
@@ -164,7 +207,10 @@ def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> No
                 history, dataset=True, bypass_manage_permission=True
             )
         trans.sa_session.add(history)
-    trans.set_user_context(user)
+    try:
+        trans.set_user_context(user)
+    except AttributeError:
+        trans.set_user(user)
 
 
 def issue_browser_auth_for_user(

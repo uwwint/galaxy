@@ -19,11 +19,7 @@ import mako.lookup
 import mako.runtime
 from apispec import APISpec
 from paste.urlmap import URLMap
-from sqlalchemy import (
-    and_,
-    select,
-    true,
-)
+from sqlalchemy import select
 from sqlalchemy.exc import NoResultFound
 from webob.exc import HTTPException
 
@@ -31,13 +27,11 @@ from galaxy import util
 from galaxy.exceptions import (
     AuthenticationFailed,
     ConfigurationError,
-    MalformedId,
     MessageException,
     RequestParameterMissingException,
 )
 from galaxy.managers import context
 from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
-from galaxy.managers.session import GalaxySessionManager
 from galaxy.managers.users import UserManager
 from galaxy.model import History
 from galaxy.model.base import ensure_object_added_to_session
@@ -323,7 +317,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self._app = app
         self.webapp = webapp
         self.user_manager = app[UserManager]
-        self.session_manager = app[GalaxySessionManager]
         self.auth_session_manager = getattr(app, "auth_session_manager", None)
         super().__init__(environ)
         config = self.app.config
@@ -355,49 +348,36 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             assert session_cookie
             self.error_message = self._authenticate_api(session_cookie)
         elif self.app.name == "reports":
-            self.galaxy_session = None
+            self.auth_session = None
         else:
-            # This is a web request, get or create session.
-            assert session_cookie
-            self._ensure_valid_session(session_cookie)
-        self._load_auth_session()
+            self._ensure_browser_auth_session()
 
         if hasattr(self.app, "authnz_manager") and self.app.authnz_manager:
             self.app.authnz_manager.refresh_expiring_oidc_tokens(self)
 
-        if self.galaxy_session:
-            # When we've authenticated by session, we have to check the
-            # following.
-            # Prevent deleted users from accessing Galaxy
-            if config.use_remote_user and self.galaxy_session.user.deleted:
+        if self.auth_session:
+            # Prevent deleted users from accessing Galaxy.
+            if config.get("use_remote_user", False) and self.auth_session.user and self.auth_session.user.deleted:
                 self.response.send_redirect(url_for("/static/user_disabled.html"))
-            if config.require_login:
-                self._ensure_logged_in_user(session_cookie)
-            if config.session_duration:
-                # TODO DBTODO All ajax calls from the client need to go through
-                # a single point of control where we can do things like
-                # redirect/etc.  This is API calls as well as something like 40
-                # @web.json requests that might not get handled well on the
-                # clientside.
-                #
-                # Make sure we're not past the duration, and either log out or
-                # update timestamp.
+        if config.get("require_login", False):
+            self._ensure_logged_in_user()
+            if config.get("session_duration", None):
                 now = datetime.datetime.now()
-                if self.galaxy_session.last_action:
-                    expiration_time = self.galaxy_session.last_action + datetime.timedelta(
-                        minutes=config.session_duration
+                if self.auth_session.last_activity:
+                    expiration_time = self.auth_session.last_activity + datetime.timedelta(
+                        minutes=config.get("session_duration", 0)
                     )
                 else:
                     expiration_time = now
-                    self.galaxy_session.last_action = now - datetime.timedelta(seconds=1)
-                    self.sa_session.add(self.galaxy_session)
+                    self.auth_session.last_activity = now - datetime.timedelta(seconds=1)
+                    self.sa_session.add(self.auth_session)
                     self.sa_session.commit()
                 if expiration_time < now:
-                    # Expiration time has passed.
                     self.handle_user_logout()
                     if self.environ.get("is_api_request", False):
                         self.response.status = 401
                         self.user = None
+                        self.auth_session = None
                         self.galaxy_session = None
                     else:
                         self.response.send_redirect(
@@ -408,9 +388,13 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                             )
                         )
                 else:
-                    self.galaxy_session.last_action = now
-                    self.sa_session.add(self.galaxy_session)
+                    self.auth_session.last_activity = now
+                    self.sa_session.add(self.auth_session)
                     self.sa_session.commit()
+        elif not self.environ.get("is_api_request", False):
+            self._ensure_browser_auth_session()
+
+        self.galaxy_session = self.auth_session
 
     @property
     def app(self):
@@ -475,8 +459,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         user = self.__user
         if not user and self.auth_session:
             user = self.auth_session.user
-        if not user and self.galaxy_session:
-            user = self.galaxy_session.user
+        if user is not None:
             self.__user = user
         return user
 
@@ -486,11 +469,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.auth_session.user = user
             self.sa_session.add(self.auth_session)
             self.sa_session.commit()
-        elif self.galaxy_session:
-            if user and not user.bootstrap_admin_user:
-                self.galaxy_session.user = user
-                self.sa_session.add(self.galaxy_session)
-                self.sa_session.commit()
         self.__user = user
         if self._actor_user is None or user is None:
             self._actor_user = user
@@ -517,34 +495,12 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             # If we've changed the cookie during the request return the new value
             if name in self.response.cookies:
                 return self.response.cookies[name].value
-            else:
-                if name not in self.request.cookies and TOOL_RUNNER_SESSION_COOKIE in self.request.cookies:
-                    # TOOL_RUNNER_SESSION_COOKIE value is the encoded galaxysession cookie.
-                    # We decode it here and pretend it's the galaxysession
-                    tool_runner_path = url_for(controller="tool_runner")
-                    if self.request.path.startswith(tool_runner_path):
-                        return self.security.decode_guid(self.request.cookies[TOOL_RUNNER_SESSION_COOKIE].value)
-                return self.request.cookies[name].value
+            return self.request.cookies[name].value
         except Exception:
             return None
 
     def set_cookie(self, value, name="galaxysession", path="/", age=90, version="1"):
         self._set_cookie(value, name=name, path=path, age=age, version=version)
-        if name == "galaxysession":
-            # Set an extra sessioncookie that will only be sent and be accepted on the tool_runner path.
-            # Use the id_secret to encode the sessioncookie, so if a malicious site
-            # obtains the sessioncookie they can only run tools.
-            self._set_cookie(
-                value,
-                name=TOOL_RUNNER_SESSION_COOKIE,
-                path=url_for(controller="tool_runner"),
-                age=age,
-                version=version,
-                encode_value=True,
-            )
-            tool_runner_cookie = self.response.cookies[TOOL_RUNNER_SESSION_COOKIE]
-            tool_runner_cookie["SameSite"] = "None"
-            tool_runner_cookie["secure"] = True
 
     def set_auth_cookie(self, refresh_token: str, expires_at: Optional[datetime.datetime]) -> None:
         max_age = 0
@@ -556,7 +512,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         tstamp = time.gmtime(time.time() + max_age)
         self.response.cookies[AUTH_SESSION_COOKIE_NAME]["expires"] = time.strftime("%a, %d-%b-%Y %H:%M:%S GMT", tstamp)
         self.response.cookies[AUTH_SESSION_COOKIE_NAME]["version"] = "1"
-        if self.request.environ["wsgi.url_scheme"] == "https":
+        if self.request.environ.get("wsgi.url_scheme") == "https":
             self.response.cookies[AUTH_SESSION_COOKIE_NAME]["secure"] = True
         self.response.cookies[AUTH_SESSION_COOKIE_NAME]["httponly"] = True
         if self.app.config.cookie_domain is not None:
@@ -577,7 +533,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         tstamp = time.localtime(time.time() + 3600 * 24 * age)
         self.response.cookies[name]["expires"] = time.strftime("%a, %d-%b-%Y %H:%M:%S GMT", tstamp)
         self.response.cookies[name]["version"] = version
-        https = self.request.environ["wsgi.url_scheme"] == "https"
+        https = self.request.environ.get("wsgi.url_scheme") == "https"
         if https:
             self.response.cookies[name]["secure"] = True
         try:
@@ -596,7 +552,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.environ.get("is_api_request", False) and oidc_access_token and "Bearer " in oidc_access_token
         )
         api_key = self.request.params.get("key", None) or self.request.headers.get("x-api-key", None)
-        secure_id = self.get_cookie(name=session_cookie)
         api_key_supplied = self.environ.get("is_api_request", False) and api_key
         if api_key_supplied:
             # Sessionless API transaction, we just need to associate a user.
@@ -605,18 +560,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             except AuthenticationFailed as e:
                 return str(e)
             self.set_user(user)
-        elif secure_id:
-            # API authentication via active session
-            # Associate user using existing session
-            # This will throw an exception under remote auth with anon users.
-            try:
-                self._ensure_valid_session(session_cookie)
-            except Exception:
-                log.exception(
-                    "Exception during Session-based API authentication, this was most likely an attempt to use an anonymous cookie under remote authentication (so, no user), which we don't support."
-                )
-                self.user = None
-                self.galaxy_session = None
         elif oidc_token_supplied:
             # Sessionless API transaction with oidc token, we just need to associate a user.
             oidc_access_token = oidc_access_token.replace("Bearer ", "")
@@ -628,7 +571,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         else:
             # Anonymous API interaction -- anything but @expose_api_anonymous will fail past here.
             self.user = None
-            self.galaxy_session = None
+            self.auth_session = None
         return None
 
     def _load_auth_session(self) -> None:
@@ -642,116 +585,27 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         except AuthenticationFailed:
             self.auth_session = None
 
-    def _ensure_valid_session(self, session_cookie: str, create: bool = True) -> None:
-        """
-        Ensure that a valid Galaxy session exists and is available as
-        trans.session (part of initialization)
-        """
-        # Try to load an existing session
-        secure_id = self.get_cookie(name=session_cookie)
-        galaxy_session = None
-        prev_galaxy_session = None
-        user_for_new_session = None
-        invalidate_existing_session = False
-        # Track whether the session has changed so we can avoid calling flush
-        # in the most common case (session exists and is valid).
-        galaxy_session_requires_flush = False
-        if secure_id:
-            # Decode the cookie value to get the session_key
-            try:
-                session_key = self.security.decode_guid(secure_id)
-            except MalformedId:
-                # Invalid session key, we're going to create a new one.
-                # IIRC we did this when we switched to python 3 and clients
-                # were sending sessioncookies that started with a stringified
-                # bytestring, e.g 'b"0123456789abcdef"'. Maybe we need to drop
-                # this exception catching, but then it'd be tricky to invalidate
-                # a faulty session key
-                log.debug("Received invalid session key '{secure_id}', setting a new session key")
-                session_key = None
-
-            if session_key:
-                # We do NOT catch exceptions here, if the database is down the request should fail,
-                # and we should not generate a new session.
-                galaxy_session = self.session_manager.get_session_from_session_key(session_key=session_key)
-            if not galaxy_session:
-                session_key = None
-        # If remote user is in use it can invalidate the session and in some
-        # cases won't have a cookie set above, so we need to check some things
-        # now.
-        if self.app.config.use_remote_user:
-            remote_user_email = self.environ.get(self.app.config.remote_user_header, None)
-            if galaxy_session:
-                if remote_user_email and galaxy_session.user is None:
-                    # No user, associate
-                    galaxy_session.user = self.user_manager.get_or_create_remote_user(remote_user_email)
-                    galaxy_session_requires_flush = True
-                elif (
-                    remote_user_email
-                    and galaxy_session.user.email.lower() != remote_user_email.lower()
-                    and (
-                        not self.app.config.allow_user_impersonation
-                        or remote_user_email not in self.app.config.admin_users_list
-                    )
-                ):
-                    # Session exists but is not associated with the correct
-                    # remote user, and the currently set remote_user is not a
-                    # potentially impersonating admin.
-                    invalidate_existing_session = True
-                    user_for_new_session = self.user_manager.get_or_create_remote_user(remote_user_email)
-                    log.warning(
-                        "User logged in as '%s' externally, but has a cookie as '%s' invalidating session",
-                        remote_user_email,
-                        galaxy_session.user.email,
-                    )
-            elif remote_user_email:
-                # No session exists, get/create user for new session
-                user_for_new_session = self.user_manager.get_or_create_remote_user(remote_user_email)
-            if (galaxy_session and galaxy_session.user is None) and user_for_new_session is None:
-                raise Exception("Remote Authentication Failure - user is unknown and/or not supplied.")
-        else:
-            if galaxy_session is not None and galaxy_session.user and galaxy_session.user.external:
-                # Remote user support is not enabled, but there is an existing
-                # session with an external user, invalidate
-                invalidate_existing_session = True
-                log.warning(
-                    "User '%s' is an external user with an existing session, invalidating session since external auth is disabled",
-                    galaxy_session.user.email,
-                )
-            elif galaxy_session is not None and galaxy_session.user is not None and galaxy_session.user.deleted:
-                invalidate_existing_session = True
-                log.warning(f"User '{galaxy_session.user.email}' is marked deleted, invalidating session")
-        # Do we need to invalidate the session for some reason?
-        if invalidate_existing_session:
-            assert galaxy_session
-            prev_galaxy_session = galaxy_session
-            prev_galaxy_session.is_valid = False
-            galaxy_session = None
-        # No relevant cookies, or couldn't find, or invalid, so create a new session
-        if galaxy_session is None:
-            galaxy_session = self.__create_new_session(prev_galaxy_session, user_for_new_session)
-            galaxy_session_requires_flush = True
-            self.galaxy_session = galaxy_session
-            self.__update_session_cookie(name=session_cookie)
-        else:
-            self.galaxy_session = galaxy_session
-            if self.webapp.name == "galaxy":
-                self.get_or_create_default_history()
-        # Do we need to flush the session?
-        if galaxy_session_requires_flush:
-            self.sa_session.add(galaxy_session)
-            # FIXME: If prev_session is a proper relation this would not
-            #        be needed.
-            if prev_galaxy_session:
-                self.sa_session.add(prev_galaxy_session)
+    def _ensure_browser_auth_session(self) -> None:
+        if self.auth_session_manager is None:
+            return
+        if self.auth_session is None:
+            self.auth_session = self.auth_session_manager.create_session(
+                auth_source="anonymous",
+                remote_host=self.request.remote_host,
+                remote_addr=self.request.remote_addr,
+                referer=self.request.headers.get("Referer", None),
+            )
+            refresh_token = self.auth_session_manager.issue_refresh_token(self.auth_session)
             self.sa_session.commit()
+            self.set_auth_cookie(refresh_token, self.auth_session.refresh_token_expires_at)
+        self.galaxy_session = self.auth_session
 
-    def _ensure_logged_in_user(self, session_cookie: str) -> None:
-        # The value of session_cookie can be one of
-        # 'galaxysession' or 'galaxycommunitysession'
-        # Currently this method does nothing unless session_cookie is 'galaxysession'
-        assert self.galaxy_session
-        if session_cookie == "galaxysession" and self.galaxy_session.user is None:
+    def _ensure_valid_session(self, session_cookie: str, create: bool = True) -> None:
+        """Deprecated legacy session loader retained for compatibility during migration."""
+        self._ensure_browser_auth_session()
+
+    def _ensure_logged_in_user(self) -> None:
+        if self.auth_session is None or self.auth_session.user is None:
             # TODO: re-engineer to eliminate the use of allowed_paths
             # as maintenance overhead is far too high.
             allowed_paths = [
@@ -808,28 +662,14 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                 login_url = url_for("/login", redirect=self.request.path)
                 self.response.send_redirect(login_url)
 
-    def __create_new_session(self, prev_galaxy_session=None, user_for_new_session=None):
-        """
-        Create a new GalaxySession for this request, possibly with a connection
-        to a previous session (in `prev_galaxy_session`) and an existing user
-        (in `user_for_new_session`).
-
-        Caller is responsible for flushing the returned session.
-        """
-        return create_new_session(
-            self, prev_galaxy_session=prev_galaxy_session, user_for_new_session=user_for_new_session
-        )
-
     @property
     def cookie_path(self):
         # Cookies for non-root paths should not end with `/` -> https://stackoverflow.com/questions/36131023/setting-a-slash-on-cookie-path
         return (self.app.config.cookie_path or url_for("/")).rstrip("/") or "/"
 
     def __update_session_cookie(self, name="galaxysession"):
-        """
-        Update the session cookie to match the current session.
-        """
-        self.set_cookie(self.security.encode_guid(self.galaxy_session.session_key), name=name, path=self.cookie_path)
+        """Deprecated legacy helper."""
+        return None
 
     def check_user_library_import_dir(self, user):
         if getattr(self.app.config, "user_library_import_dir_auto_creation", False):
@@ -846,53 +686,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.check_user_library_import_dir(user)
 
     def _associate_user_history(self, user, prev_galaxy_session=None):
-        """
-        Associate the user's last accessed history (if exists) with their new session
-        """
-        history = None
-        set_permissions = False
-        try:
-            users_last_session = user.current_galaxy_session
-        except Exception:
-            users_last_session = None
-        if (
-            prev_galaxy_session
-            and prev_galaxy_session.current_history
-            and not prev_galaxy_session.current_history.deleted
-            and not prev_galaxy_session.current_history.empty
-            and (prev_galaxy_session.current_history.user is None or prev_galaxy_session.current_history.user == user)
-        ):
-            # If the previous galaxy session had a history, associate it with the new session, but only if it didn't
-            # belong to a different user.
-            history = prev_galaxy_session.current_history
-            if prev_galaxy_session.user is None:
-                # Increase the user's disk usage by the amount of the previous history's datasets if they didn't already
-                # own it.
-                for hda in history.datasets:
-                    user.adjust_total_disk_usage(hda.quota_amount(user), hda.dataset.quota_source_info.label)
-                # Only set default history permissions if the history is from the previous session and anonymous
-                set_permissions = True
-        elif self.galaxy_session.current_history:
-            history = self.galaxy_session.current_history
-        if (
-            not history
-            and users_last_session
-            and users_last_session.current_history
-            and not users_last_session.current_history.deleted
-        ):
-            history = users_last_session.current_history
-        if history not in self.galaxy_session.histories:
-            self.galaxy_session.add_history(history)
-        if not history:
-            history = self.new_history()
-        if history.user is None:
-            history.user = user
-        self.galaxy_session.current_history = history
-        if set_permissions:
-            self.app.security_agent.history_set_default_permissions(
-                history, dataset=True, bypass_manage_permission=True
-            )
-        self.sa_session.add_all((prev_galaxy_session, self.galaxy_session, history))
+        """Deprecated legacy helper."""
+        return None
 
     def handle_user_login(self, user):
         """
@@ -906,22 +701,10 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         """
         self.user_checks(user)
         self.app.security_agent.create_user_role(user, self.app)
-        # Set the previous session
-        prev_galaxy_session = self.galaxy_session
-        prev_galaxy_session.is_valid = False
-        # Define a new current_session
-        self.galaxy_session = self.__create_new_session(prev_galaxy_session, user)
+        self.issue_auth_session(user=user, auth_source="galaxy_token")
+        self.galaxy_session = self.auth_session
         if self.webapp.name == "galaxy":
-            cookie_name = "galaxysession"
-            self._associate_user_history(user, prev_galaxy_session)
-        else:
-            cookie_name = "galaxycommunitysession"
-            self.sa_session.add_all((prev_galaxy_session, self.galaxy_session))
-        self.sa_session.commit()
-        # This method is not called from the Galaxy reports, so the cookie will always be galaxysession
-        self.__update_session_cookie(name=cookie_name)
-        if self.webapp.name == "galaxy":
-            self.issue_auth_session(user=user, auth_source="galaxy_token")
+            self.get_or_create_default_history()
 
     def handle_user_logout(self, logout_all=False):
         """
@@ -929,35 +712,31 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
            - invalidate the current session
            - create a new session with no user associated
         """
-        prev_galaxy_session = self.galaxy_session
-        prev_galaxy_session.is_valid = False
-        self.galaxy_session = self.__create_new_session(prev_galaxy_session)
-        self.sa_session.add_all((prev_galaxy_session, self.galaxy_session))
-        galaxy_user_id = prev_galaxy_session.user_id
-        if logout_all and galaxy_user_id is not None:
-            stmt = select(self.app.model.GalaxySession).filter(
-                and_(
-                    self.app.model.GalaxySession.user_id == galaxy_user_id,
-                    self.app.model.GalaxySession.is_valid == true(),
-                    self.app.model.GalaxySession.id != prev_galaxy_session.id,
-                )
-            )
-            for other_galaxy_session in self.sa_session.scalars(stmt):
-                other_galaxy_session.is_valid = False
-                self.sa_session.add(other_galaxy_session)
-        self.sa_session.commit()
-        if self.webapp.name == "galaxy":
-            # This method is not called from the Galaxy reports, so the cookie will always be galaxysession
-            self.__update_session_cookie(name="galaxysession")
-        elif self.webapp.name == "tool_shed":
-            self.__update_session_cookie(name="galaxycommunitysession")
+        previous_auth_session = self.auth_session
+        previous_history = self.history
         self.invalidate_auth_session(logout_all=logout_all)
+        if previous_auth_session and logout_all and previous_auth_session.user is not None:
+            self.auth_session_manager.invalidate_sessions_for_user(
+                previous_auth_session.user, exclude_auth_session_id=previous_auth_session.id
+            )
+        if self.auth_session_manager is not None:
+            self.auth_session = self.auth_session_manager.create_session(
+                auth_source="anonymous",
+                current_history=previous_history,
+                remote_host=self.request.remote_host,
+                remote_addr=self.request.remote_addr,
+                referer=self.request.headers.get("Referer", None),
+            )
+            refresh_token = self.auth_session_manager.issue_refresh_token(self.auth_session)
+            self.sa_session.commit()
+            self.set_auth_cookie(refresh_token, self.auth_session.refresh_token_expires_at)
+        self.galaxy_session = self.auth_session
 
     def get_galaxy_session(self):
         """
         Return the current galaxy session
         """
-        return self.galaxy_session
+        return self.auth_session
 
     def issue_auth_session(self, user=None, auth_source="galaxy_token"):
         if self.auth_session_manager is None:
@@ -976,6 +755,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         refresh_token = self.auth_session_manager.issue_refresh_token(auth_session)
         self.sa_session.commit()
         self.auth_session = auth_session
+        self.galaxy_session = self.auth_session
         self.set_auth_cookie(refresh_token, auth_session.refresh_token_expires_at)
         return auth_session
 
@@ -991,6 +771,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                 )
             self.sa_session.commit()
         self.auth_session = None
+        self.galaxy_session = None
         self.clear_auth_cookie()
 
     def get_history(self, create=False, most_recent=False):
@@ -1006,9 +787,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         history = None
         if self.auth_session and hasattr(self.auth_session, "current_history"):
             history = self.auth_session.current_history
-        if self.galaxy_session:
-            if hasattr(self.galaxy_session, "current_history"):
-                history = self.galaxy_session.current_history
         if not history and most_recent:
             history = self.get_most_recent_history()
         if not history and util.string_as_bool(create):
@@ -1019,9 +797,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         if history and not history.deleted and self.auth_session:
             self.auth_session.current_history = history
             self.sa_session.add(self.auth_session)
-        elif history and not history.deleted and self.galaxy_session:
-            self.galaxy_session.current_history = history
-            self.sa_session.add(self.galaxy_session)
         self.sa_session.commit()
 
     @property
@@ -1033,17 +808,17 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         Gets or creates a default history and associates it with the current
         session.
         """
-        assert self.galaxy_session
+        assert self.auth_session
 
         # Just return the current history if one exists and is not deleted.
-        history = self.galaxy_session.current_history
+        history = self.auth_session.current_history
         if history and not history.deleted:
             return history
 
         # Look for an existing history that has the default name, is not
         # deleted, and is empty. If this exists, we associate it with the
         # current session and return it.
-        if user := self.galaxy_session.user:
+        if user := self.auth_session.user:
             stmt = select(History).filter_by(user=user, name=History.default_name, deleted=False)
             unnamed_histories = self.sa_session.scalars(stmt)
             for history in unnamed_histories:
@@ -1052,7 +827,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                     return history
 
         # Don't create new history if login required and user is anonymous
-        if self.app.config.require_login and not self.user:
+        if self.app.config.get("require_login", False) and not self.user:
             return None
 
         # No suitable history found, create a new one.
@@ -1084,19 +859,17 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         history = History()
         if name:
             history.name = name
-        # Associate with session
-        history.add_galaxy_session(self.galaxy_session)
         # Make it the session's current history
-        self.galaxy_session.current_history = history
+        self.auth_session.current_history = history
         # Associate with user
-        if self.galaxy_session.user:
-            history.user = self.galaxy_session.user
+        if self.auth_session.user:
+            history.user = self.auth_session.user
         # Track genome_build with history
         history.genome_build = self.app.genome_builds.default_value
         # Set the user's default history permissions
         self.app.security_agent.history_set_default_permissions(history)
         # Save
-        self.sa_session.add_all((self.galaxy_session, history))
+        self.sa_session.add_all((self.auth_session, history))
         self.sa_session.commit()
         return history
 
@@ -1165,8 +938,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
     @property
     def session_csrf_token(self):
         token = ""
-        if self.galaxy_session:
-            token = self.security.encode_id(self.galaxy_session.id, kind="csrf")
+        if self.auth_session:
+            token = self.security.encode_id(self.auth_session.id, kind="csrf")
         return token
 
     def check_csrf_token(self, payload):
@@ -1210,28 +983,25 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
 
 def create_new_session(trans, prev_galaxy_session=None, user_for_new_session=None):
     """
-    Create a new GalaxySession for this request, possibly with a connection
+    Create a new AuthSession for this request, possibly with a connection
     to a previous session (in `prev_galaxy_session`) and an existing user
     (in `user_for_new_session`).
 
     Caller is responsible for flushing the returned session.
     """
-    session_key = trans.security.get_new_guid()
-    galaxy_session = trans.app.model.GalaxySession(
-        session_key=session_key,
+    auth_session = trans.app.model.AuthSession(
         is_valid=True,
+        session_type="browser",
+        auth_source="anonymous" if user_for_new_session is None else "galaxy_token",
         remote_host=trans.request.remote_host,
         remote_addr=trans.request.remote_addr,
         referer=trans.request.headers.get("Referer", None),
     )
-    if prev_galaxy_session:
-        # Invalidated an existing session for some reason, keep track
-        galaxy_session.prev_session_id = prev_galaxy_session.id
     if user_for_new_session:
         # The new session should be associated with the user
-        galaxy_session.user = user_for_new_session
-        ensure_object_added_to_session(galaxy_session, object_in_session=user_for_new_session)
-    return galaxy_session
+        auth_session.user = user_for_new_session
+        ensure_object_added_to_session(auth_session, object_in_session=user_for_new_session)
+    return auth_session
 
 
 def default_url_path(path):
