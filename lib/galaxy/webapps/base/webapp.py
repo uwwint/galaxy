@@ -482,7 +482,11 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
 
     def set_user(self, user):
         """Set the current user."""
-        if self.galaxy_session:
+        if self.auth_session:
+            self.auth_session.user = user
+            self.sa_session.add(self.auth_session)
+            self.sa_session.commit()
+        elif self.galaxy_session:
             if user and not user.bootstrap_admin_user:
                 self.galaxy_session.user = user
                 self.sa_session.add(self.galaxy_session)
@@ -1014,11 +1018,10 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
     def set_history(self, history):
         if history and not history.deleted and self.auth_session:
             self.auth_session.current_history = history
-        if history and not history.deleted and self.galaxy_session:
-            self.galaxy_session.current_history = history
-        if self.auth_session:
             self.sa_session.add(self.auth_session)
-        self.sa_session.add(self.galaxy_session)
+        elif history and not history.deleted and self.galaxy_session:
+            self.galaxy_session.current_history = history
+            self.sa_session.add(self.galaxy_session)
         self.sa_session.commit()
 
     @property

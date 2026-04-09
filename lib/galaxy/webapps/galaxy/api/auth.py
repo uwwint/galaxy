@@ -175,7 +175,6 @@ def issue_browser_auth_for_user(
     status: Optional[str] = None,
     redirect: Optional[str] = None,
 ) -> dict[str, Any]:
-    _promote_browser_login_state(trans, user)
     current_auth_session = trans.auth_session
     if current_auth_session is not None:
         trans.app.auth_session_manager.invalidate_session(current_auth_session)
@@ -187,10 +186,11 @@ def issue_browser_auth_for_user(
         remote_addr=_request_remote_addr(trans),
         referer=_request_headers(trans).get("Referer", None),
     )
-    refresh_token = trans.app.auth_session_manager.issue_refresh_token(auth_session)
-    trans.sa_session.commit()
     trans.auth_session = auth_session
     trans._auth_source = "galaxy_token"
+    _promote_browser_login_state(trans, user)
+    refresh_token = trans.app.auth_session_manager.issue_refresh_token(auth_session)
+    trans.sa_session.commit()
     _set_refresh_cookie(trans, refresh_token, auth_session.refresh_token_expires_at)
     access_token = trans.app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
     return _success_payload(trans, access_token, message=message, status=status, redirect=redirect)
