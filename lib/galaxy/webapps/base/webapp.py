@@ -36,6 +36,7 @@ from galaxy.exceptions import (
     RequestParameterMissingException,
 )
 from galaxy.managers import context
+from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
 from galaxy.managers.session import GalaxySessionManager
 from galaxy.managers.users import UserManager
 from galaxy.model import History
@@ -323,6 +324,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.webapp = webapp
         self.user_manager = app[UserManager]
         self.session_manager = app[GalaxySessionManager]
+        self.auth_session_manager = getattr(app, "auth_session_manager", None)
         super().__init__(environ)
         config = self.app.config
         self.debug = asbool(config.get("debug", False))
@@ -335,6 +337,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.workflow_building_mode = False
         self.__user = None
         self._actor_user = None
+        self.auth_session = None
         self.galaxy_session = None
         self.error_message = None
         self.host = self.request.host
@@ -357,6 +360,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             # This is a web request, get or create session.
             assert session_cookie
             self._ensure_valid_session(session_cookie)
+        self._load_auth_session()
 
         if hasattr(self.app, "authnz_manager") and self.app.authnz_manager:
             self.app.authnz_manager.refresh_expiring_oidc_tokens(self)
@@ -530,6 +534,25 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             tool_runner_cookie["SameSite"] = "None"
             tool_runner_cookie["secure"] = True
 
+    def set_auth_cookie(self, refresh_token: str, expires_at: Optional[datetime.datetime]) -> None:
+        max_age = 0
+        if expires_at is not None:
+            max_age = max(0, int((expires_at - datetime.datetime.utcnow()).total_seconds()))
+        self.response.cookies[AUTH_SESSION_COOKIE_NAME] = unicodify(refresh_token)
+        self.response.cookies[AUTH_SESSION_COOKIE_NAME]["path"] = self.cookie_path
+        self.response.cookies[AUTH_SESSION_COOKIE_NAME]["max-age"] = max_age
+        tstamp = time.gmtime(time.time() + max_age)
+        self.response.cookies[AUTH_SESSION_COOKIE_NAME]["expires"] = time.strftime("%a, %d-%b-%Y %H:%M:%S GMT", tstamp)
+        self.response.cookies[AUTH_SESSION_COOKIE_NAME]["version"] = "1"
+        if self.request.environ["wsgi.url_scheme"] == "https":
+            self.response.cookies[AUTH_SESSION_COOKIE_NAME]["secure"] = True
+        self.response.cookies[AUTH_SESSION_COOKIE_NAME]["httponly"] = True
+        if self.app.config.cookie_domain is not None:
+            self.response.cookies[AUTH_SESSION_COOKIE_NAME]["domain"] = self.app.config.cookie_domain
+
+    def clear_auth_cookie(self) -> None:
+        self.set_auth_cookie("", datetime.datetime.utcnow())
+
     def _set_cookie(self, value, name="galaxysession", path="/", age=90, version="1", encode_value=False):
         """Convenience method for setting a session cookie"""
         # The galaxysession cookie value must be a high entropy 128 bit random number encrypted
@@ -595,6 +618,17 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.user = None
             self.galaxy_session = None
         return None
+
+    def _load_auth_session(self) -> None:
+        if self.auth_session_manager is None:
+            return
+        refresh_token = self.get_cookie(name=AUTH_SESSION_COOKIE_NAME)
+        if not refresh_token:
+            return
+        try:
+            self.auth_session = self.auth_session_manager.get_session_for_refresh_token(refresh_token)
+        except AuthenticationFailed:
+            self.auth_session = None
 
     def _ensure_valid_session(self, session_cookie: str, create: bool = True) -> None:
         """
@@ -874,6 +908,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.sa_session.commit()
         # This method is not called from the Galaxy reports, so the cookie will always be galaxysession
         self.__update_session_cookie(name=cookie_name)
+        if self.webapp.name == "galaxy":
+            self.issue_auth_session(user=user, auth_source="galaxy_token")
 
     def handle_user_logout(self, logout_all=False):
         """
@@ -903,12 +939,47 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.__update_session_cookie(name="galaxysession")
         elif self.webapp.name == "tool_shed":
             self.__update_session_cookie(name="galaxycommunitysession")
+        self.invalidate_auth_session(logout_all=logout_all)
 
     def get_galaxy_session(self):
         """
         Return the current galaxy session
         """
         return self.galaxy_session
+
+    def issue_auth_session(self, user=None, auth_source="galaxy_token"):
+        if self.auth_session_manager is None:
+            return None
+        if self.auth_session is not None:
+            self.auth_session_manager.invalidate_session(self.auth_session)
+        current_history = self.galaxy_session.current_history if self.galaxy_session else None
+        auth_session = self.auth_session_manager.create_session(
+            user=user,
+            auth_source=auth_source,
+            current_history=current_history,
+            remote_host=self.request.remote_host,
+            remote_addr=self.request.remote_addr,
+            referer=self.request.headers.get("Referer", None),
+        )
+        refresh_token = self.auth_session_manager.issue_refresh_token(auth_session)
+        self.sa_session.commit()
+        self.auth_session = auth_session
+        self.set_auth_cookie(refresh_token, auth_session.refresh_token_expires_at)
+        return auth_session
+
+    def invalidate_auth_session(self, logout_all=False):
+        if self.auth_session_manager is None:
+            return
+        current_auth_session = self.auth_session
+        if current_auth_session is not None:
+            self.auth_session_manager.invalidate_session(current_auth_session)
+            if logout_all and current_auth_session.user is not None:
+                self.auth_session_manager.invalidate_sessions_for_user(
+                    current_auth_session.user, exclude_auth_session_id=current_auth_session.id
+                )
+            self.sa_session.commit()
+        self.auth_session = None
+        self.clear_auth_cookie()
 
     def get_history(self, create=False, most_recent=False):
         """

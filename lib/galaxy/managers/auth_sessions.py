@@ -75,9 +75,7 @@ class AuthSessionManager:
         *,
         expires_in: timedelta = DEFAULT_REFRESH_TOKEN_LIFETIME,
     ) -> str:
-        if auth_session.id is None:
-            self.sa_session.add(auth_session)
-            self.sa_session.flush()
+        auth_session = self._attach_auth_session(auth_session)
         now = _utcnow()
         secret = self.security.get_new_guid()
         session_id = self.security.encode_id(auth_session.id, kind=REFRESH_TOKEN_KIND)
@@ -119,6 +117,7 @@ class AuthSessionManager:
         return self.sa_session.scalars(stmt).first()
 
     def invalidate_session(self, auth_session: AuthSession) -> None:
+        auth_session = self._attach_auth_session(auth_session)
         auth_session.is_valid = False
         auth_session.refresh_token_hash = None
         auth_session.refresh_token_iat = None
@@ -248,6 +247,17 @@ class AuthSessionManager:
         if auth_session is None:
             raise exceptions.AuthenticationFailed("Refresh token session was not found.")
         return auth_session
+
+    def _attach_auth_session(self, auth_session: AuthSession) -> AuthSession:
+        if auth_session.id is None:
+            self.sa_session.add(auth_session)
+            self.sa_session.flush()
+            return auth_session
+        managed_auth_session = self.get_session_by_id(auth_session.id)
+        if managed_auth_session is None:
+            managed_auth_session = self.sa_session.merge(auth_session)
+            self.sa_session.flush()
+        return managed_auth_session
 
     @staticmethod
     def _hash_token(token: str) -> str:
