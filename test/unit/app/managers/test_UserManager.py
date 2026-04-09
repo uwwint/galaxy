@@ -184,6 +184,27 @@ class TestUserManager(BaseTestCase):
         )
         assert message == "Invalid or expired password reset token, please request a new one."
 
+    def test_change_password_invalidates_other_auth_sessions(self):
+        user2 = self.user_manager.create(**user2_data)
+        current_auth_session = self.app.auth_session_manager.create_session(user=user2, auth_source="galaxy_token")
+        other_auth_session = self.app.auth_session_manager.create_session(user=user2, auth_source="galaxy_token")
+        self.app.auth_session_manager.issue_refresh_token(current_auth_session)
+        self.app.auth_session_manager.issue_refresh_token(other_auth_session)
+        self.trans.auth_session = current_auth_session
+
+        user, message = self.user_manager.change_password(
+            self.trans,
+            id=self.app.security.encode_id(user2.id),
+            current=default_password,
+            password=changed_password,
+            confirm=changed_password,
+        )
+
+        assert user == user2
+        assert message == "Password has been changed."
+        assert self.app.auth_session_manager.get_session_by_id(current_auth_session.id) is not None
+        assert self.app.auth_session_manager.get_session_by_id(other_auth_session.id) is None
+
     def test_login(self):
         self.log("should be able to validate user credentials")
         user2 = self.user_manager.create(**user2_data)

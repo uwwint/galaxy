@@ -10,21 +10,14 @@ import { withPrefix } from "@/utils/redirect";
 export function userLogout(logoutAll = false) {
     const Galaxy = getGalaxyInstance();
     const post_user_logout_href = Galaxy.config.post_user_logout_href;
-    const session_csrf_token = Galaxy.session_csrf_token;
-    const url = `/user/logout?session_csrf_token=${session_csrf_token}&logout_all=${logoutAll}`;
     axios
-        .get(withPrefix(url))
+        .post(withPrefix("/auth/logout"), null, { params: { logout_all: logoutAll } })
         .then((response) => {
             if (Galaxy.user) {
                 Galaxy.user.clearSessionStorage();
             }
             // Check if we need to logout of OIDC IDP
             if (Galaxy.config.enable_oidc) {
-                const provider = localStorage.getItem("galaxy-provider");
-                if (provider) {
-                    localStorage.removeItem("galaxy-provider");
-                    return axios.get(withPrefix(`/authnz/logout?provider=${provider}`));
-                }
                 return axios.get(withPrefix("/authnz/logout"));
             } else {
                 // Otherwise pass through the initial logout response

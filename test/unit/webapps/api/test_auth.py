@@ -1,6 +1,12 @@
+from datetime import (
+    datetime,
+    timedelta,
+)
+
 from galaxy import model
 from galaxy.app_unittest_utils import galaxy_mock
 from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
+from galaxy.managers.users import UserManager
 from galaxy.webapps.galaxy.api.auth import (
     bootstrap,
     login,
@@ -192,6 +198,43 @@ def test_register_issues_browser_auth_state():
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
     assert trans.auth_session is not None
     assert trans.user is not None
+
+
+def test_login_auto_registers_when_auth_manager_allows_it():
+    app = galaxy_mock.MockApp()
+    app.auth_manager.check_auto_registration = lambda trans, login, password: {
+        "auto_reg": True,
+        "email": "auto@example.org",
+        "username": "autouser",
+    }
+    trans = _build_trans(app, auth_source="session")
+
+    response = login(trans=trans, payload={"login": "autouser", "password": "password"})
+
+    assert response["message"] == "Success."
+    assert response["user"]["email"] == "auto@example.org"
+    assert response["access_token"] is not None
+    assert trans.user is not None
+    assert trans.user.email == "auto@example.org"
+
+
+def test_login_resends_activation_email_outside_grace_period():
+    app = galaxy_mock.MockApp()
+    app.config.user_activation_on = True
+    app.config.activation_grace_period = 1
+    user_manager = app[UserManager]
+    user = user_manager.create(email="inactive@example.org", username="inactive", password="password")
+    user.active = False
+    user.create_time = datetime.utcnow() - timedelta(hours=2)
+    app.model.session.add(user)
+    app.model.session.commit()
+    user_manager.send_activation_email = lambda trans, email, username: True
+    trans = _build_trans(app, auth_source="session")
+
+    response = login(trans=trans, payload={"login": "inactive", "password": "password"})
+
+    assert "This account has not been activated yet" in response["err_msg"]
+    assert trans.auth_session is None
 
 
 def test_logout_invalidates_current_auth_session_and_clears_cookie():

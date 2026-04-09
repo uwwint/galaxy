@@ -145,69 +145,14 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
 
     def __validate_login(self, trans, payload=None, **kwd):
         """Handle Galaxy Log in"""
+        from ..api import auth as auth_api
+
         if not payload:
             payload = kwd
         message = trans.check_csrf_token(payload)
         if message:
             return self.message_exception(trans, message)
-        login = payload.get("login")
-        password = payload.get("password")
-        redirect = payload.get("redirect")
-        status = None
-        if not login or not password:
-            return self.message_exception(trans, "Please specify a username and password.")
-        user = self.user_manager.get_user_by_identity(login)
-        log.debug(f"trans.app.config.auth_config_file: {trans.app.config.auth_config_file}")
-        if user is None:
-            message, user = self.__autoregistration(trans, login, password)
-            if message:
-                return self.message_exception(trans, message)
-        elif user.purged:
-            message = "This account has been permanently deleted."
-            return self.message_exception(trans, message, sanitize=False)
-        elif user.deleted:
-            message = (
-                "This account has been marked deleted, contact your local Galaxy administrator to restore the account."
-            )
-            if trans.app.config.error_email_to is not None:
-                message += f" Contact: {trans.app.config.error_email_to}."
-            return self.message_exception(trans, message, sanitize=False)
-        elif user.external:
-            message = "This account was created for use with an external authentication method, contact your local Galaxy administrator to activate it."
-            if trans.app.config.error_email_to is not None:
-                message += f" Contact: {trans.app.config.error_email_to}."
-            return self.message_exception(trans, message, sanitize=False)
-        elif not trans.app.auth_manager.check_password(user, password, trans.request):
-            return self.message_exception(trans, "Invalid password.")
-        elif trans.app.config.user_activation_on and not user.active:  # activation is ON and the user is INACTIVE
-            if trans.app.config.activation_grace_period != 0:  # grace period is ON
-                if self.is_outside_grace_period(
-                    trans, user.create_time
-                ):  # User is outside the grace period. Login is disabled and he will have the activation email resent.
-                    message, status = self.resend_activation_email(trans, user.email, user.username)
-                    return self.message_exception(trans, message, sanitize=False)
-                else:  # User is within the grace period, let him log in.
-                    trans.handle_user_login(user)
-                    trans.log_event("User logged in")
-            else:  # Grace period is off. Login is disabled and user will have the activation email resent.
-                message, status = self.resend_activation_email(trans, user.email, user.username)
-                return self.message_exception(trans, message, sanitize=False)
-        else:  # activation is OFF
-            pw_expires = getattr(trans.app.config, "password_expiration_period", None)
-            if pw_expires and user.last_password_change < datetime.today() - pw_expires:
-                # Password is expired, we don't log them in.
-                return {
-                    "message": "Your password has expired. Please reset or change it to access Galaxy.",
-                    "status": "warning",
-                    "expired_user": trans.security.encode_id(user.id),
-                }
-            trans.handle_user_login(user)
-            trans.log_event("User logged in")
-            if pw_expires and user.last_password_change < datetime.today() - timedelta(days=pw_expires.days / 10):
-                # If password is about to expire, modify message to state that.
-                expiredate = datetime.today() - user.last_password_change + pw_expires
-                return {"message": f"Your password will expire in {expiredate.days} day(s).", "status": "warning"}
-        return {"message": "Success.", "redirect": self.__get_redirect_url(redirect)}
+        return auth_api.login(trans=trans, payload=payload)
 
     @web.expose
     def resend_verification(self, trans, **kwargs):
@@ -252,31 +197,29 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
     @web.expose
     @web.json
     def logout(self, trans, logout_all=False, **kwd):
+        from ..api import auth as auth_api
+
         if message := trans.check_csrf_token(kwd):
             return self.message_exception(trans, message)
         # Since logging an event requires a session, we'll log prior to ending the session
         trans.log_event("User logged out")
-        trans.handle_user_logout(logout_all=logout_all)
-        success_response = {"message": "Success."}  # This is a little weird as a response.
-        if trans.app.config.use_remote_user and trans.app.config.remote_user_logout_href:
-            success_response["redirect_uri"] = trans.app.config.remote_user_logout_href
-        return success_response
+        return auth_api.logout(trans=trans, logout_all=logout_all)
 
     @expose_api_anonymous_and_sessionless
     def create(self, trans, payload=None, **kwd):
+        from ..api import auth as auth_api
+
         if not payload:
             payload = kwd
         message = trans.check_csrf_token(payload)
         if message:
             return self.message_exception(trans, message)
-        user, message = self.user_manager.register(trans, **_filtered_registration_params_dict(payload))
-        if message:
-            return self.message_exception(trans, message, sanitize=False)
-        elif user and not trans.user_is_admin:
-            trans.handle_user_login(user)
-            trans.log_event("User created a new account")
-            trans.log_event("User logged in")
-        return {"message": "Success."}
+        if trans.user_is_admin:
+            user, message = self.user_manager.register(trans, **_filtered_registration_params_dict(payload))
+            if message:
+                return self.message_exception(trans, message, sanitize=False)
+            return {"message": "Success."}
+        return auth_api.register(trans=trans, payload=payload)
 
     @web.expose
     def activate(self, trans, **kwd):
@@ -347,7 +290,8 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
         user, message = self.user_manager.change_password(trans, **payload)
         if user is None:
             return self.message_exception(trans, message)
-        trans.handle_user_login(user)
+        if getattr(trans, "auth_session", None) is None or payload.get("token"):
+            trans.handle_user_login(user)
         return {"message": "Password has been changed."}
 
     @expose_api_anonymous_and_sessionless

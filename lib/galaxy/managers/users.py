@@ -519,6 +519,15 @@ class UserManager(base.ModelManager, deletable.PurgableManagerMixin):
                     for other_galaxy_session in trans.sa_session.scalars(stmt):
                         other_galaxy_session.is_valid = False
                         trans.sa_session.add(other_galaxy_session)
+                current_auth_session = getattr(trans, "auth_session", None)
+                auth_session_manager = getattr(self.app, "auth_session_manager", None)
+                if auth_session_manager is not None:
+                    exclude_auth_session_id = None
+                    if current_auth_session is not None and current_auth_session.user_id == user.id:
+                        exclude_auth_session_id = current_auth_session.id
+                    auth_session_manager.invalidate_sessions_for_user(
+                        user, exclude_auth_session_id=exclude_auth_session_id
+                    )
                 trans.sa_session.add(user)
                 trans.sa_session.commit()
                 trans.log_event("User change password")
