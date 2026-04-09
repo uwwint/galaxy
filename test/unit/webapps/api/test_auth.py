@@ -9,8 +9,10 @@ from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
 from galaxy.managers.users import UserManager
 from galaxy.webapps.galaxy.api.auth import (
     bootstrap,
+    change_password,
     login,
     logout,
+    reset_password,
     register,
     refresh,
 )
@@ -198,6 +200,36 @@ def test_register_issues_browser_auth_state():
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
     assert trans.auth_session is not None
     assert trans.user is not None
+
+
+def test_change_password_issues_browser_auth_state_when_no_existing_auth_session():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    trans = _build_trans(app, user=user, auth_source="anonymous")
+
+    response = change_password(
+        trans=trans,
+        payload={
+            "id": app.security.encode_id(user.id),
+            "current": "password",
+            "password": "new_password",
+            "confirm": "new_password",
+        },
+    )
+
+    assert response["message"] == "Password has been changed."
+    assert response["access_token"] is not None
+    assert trans.auth_session is not None
+
+
+def test_reset_password_returns_message_when_email_is_accepted():
+    app = galaxy_mock.MockApp()
+    app.user_manager.send_reset_email = lambda trans, payload: None
+    trans = _build_trans(app, auth_source="anonymous")
+
+    response = reset_password(trans=trans, payload={"email": "user@example.org"})
+
+    assert response["message"] == "If an account exists for this email address a confirmation email will be dispatched."
 
 
 def test_login_auto_registers_when_auth_manager_allows_it():

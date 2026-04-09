@@ -36,7 +36,6 @@ interface Props {
     redirect?: string;
     registrationWarningMessage?: string;
     serverMailConfigured?: boolean;
-    sessionCsrfToken: string;
     hideLoginLink?: boolean; // TODO: Configure this properly
     termsUrl?: string;
 }
@@ -79,7 +78,6 @@ async function submit() {
             password: password.value,
             confirm: confirm.value,
             subscribe: subscribe.value,
-            session_csrf_token: props.sessionCsrfToken,
         });
 
         if (response.data?.err_msg) {

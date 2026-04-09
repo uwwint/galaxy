@@ -26,7 +26,6 @@ import NewUserConfirmation from "@/components/Login/NewUserConfirmation.vue";
 import ExternalLogin from "@/components/User/ExternalIdentities/ExternalLogin.vue";
 
 interface Props {
-    sessionCsrfToken: string;
     redirect?: string;
     termsUrl?: string;
     welcomeUrl?: string;
@@ -91,7 +90,6 @@ async function submitLogin() {
             login: login.value,
             password: password.value,
             redirect: redirect,
-            session_csrf_token: props.sessionCsrfToken,
         });
 
         if (response.data?.err_msg) {
@@ -134,7 +132,7 @@ function setRedirect(url: string) {
 async function resetLogin() {
     loading.value = true;
     try {
-        const response = await axios.post(withPrefix("/user/reset_password"), { email: login.value });
+        const response = await axios.post(withPrefix("/auth/reset_password"), { email: login.value });
         messageVariant.value = "info";
         messageText.value = response.data.message;
     } catch (e) {

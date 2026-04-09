@@ -2,7 +2,6 @@
 import { computed } from "vue";
 import { useRouter } from "vue-router/composables";
 
-import { getGalaxyInstance } from "@/app";
 import { useConfig } from "@/composables/config";
 
 import ChangePassword from "@/components/Login/ChangePassword.vue";
@@ -13,9 +12,6 @@ const { config, isConfigLoaded } = useConfig();
 
 const hasToken = computed(() => {
     return router.currentRoute.query.token || router.currentRoute.query.expired_user;
-});
-const sessionCsrfToken = computed(() => {
-    return getGalaxyInstance().session_csrf_token;
 });
 const queryAttributeForceString = function (
     queryAttribute: string | (string | null)[] | undefined,
@@ -45,7 +41,6 @@ const queryAttributeForceString = function (
             :enable-oidc="config.enable_oidc"
             :redirect="queryAttributeForceString(router.currentRoute.query.redirect)"
             :registration-warning-message="config.registration_warning_message"
-            :session-csrf-token="sessionCsrfToken"
             :show-reset-link="config.enable_account_interface"
             :show-welcome-with-login="config.show_welcome_with_login"
             :terms-url="config.terms_url"

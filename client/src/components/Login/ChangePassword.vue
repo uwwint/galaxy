@@ -26,7 +26,7 @@ const variant = ref(props.messageVariant);
 
 async function submit() {
     try {
-        await axios.post(withPrefix("/user/change_password"), {
+        await axios.post(withPrefix("/auth/change_password"), {
             token: props.token,
             id: props.expiredUser,
             current: current.value,

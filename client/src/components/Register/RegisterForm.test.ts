@@ -39,9 +39,6 @@ describe("RegisterForm", () => {
         const pinia = createTestingPinia({ createSpy: vi.fn });
 
         wrapper = mount(MountTarget as object, {
-            propsData: {
-                sessionCsrfToken: "sessionCsrfToken",
-            },
             localVue,
             pinia,
             router,

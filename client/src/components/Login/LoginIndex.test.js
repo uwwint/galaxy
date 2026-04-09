@@ -19,7 +19,6 @@ describe("LoginIndex", () => {
         wrapper = mount(MountTarget, {
             propsData: {
                 allowUserCreation: false,
-                sessionCsrfToken: "sessionCsrfToken",
             },
             localVue,
             router,

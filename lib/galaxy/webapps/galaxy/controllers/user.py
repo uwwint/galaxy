@@ -33,6 +33,7 @@ from galaxy.webapps.base.controller import (
     BaseUIController,
     UsesFormDefinitionsMixin,
 )
+from ..api import auth as auth_api
 from ..api import depends
 
 log = logging.getLogger(__name__)
@@ -140,13 +141,10 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
 
     @expose_api_anonymous_and_sessionless
     def login(self, trans, payload=None, **kwd):
-        payload = payload or {}
-        return self.__validate_login(trans, payload, **kwd)
+        return auth_api.login(trans=trans, payload=payload or kwd)
 
     def __validate_login(self, trans, payload=None, **kwd):
         """Handle Galaxy Log in"""
-        from ..api import auth as auth_api
-
         if not payload:
             payload = kwd
         message = trans.check_csrf_token(payload)
@@ -197,8 +195,6 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
     @web.expose
     @web.json
     def logout(self, trans, logout_all=False, **kwd):
-        from ..api import auth as auth_api
-
         if message := trans.check_csrf_token(kwd):
             return self.message_exception(trans, message)
         # Since logging an event requires a session, we'll log prior to ending the session
@@ -207,8 +203,6 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
 
     @expose_api_anonymous_and_sessionless
     def create(self, trans, payload=None, **kwd):
-        from ..api import auth as auth_api
-
         if not payload:
             payload = kwd
         message = trans.check_csrf_token(payload)
@@ -275,32 +269,11 @@ class User(BaseUIController, UsesFormDefinitionsMixin):
 
     @expose_api_anonymous_and_sessionless
     def change_password(self, trans, payload=None, **kwd):
-        """
-        Allows to change own password.
-
-        :type   payload: dict
-        :param  payload: dictionary structure containing:
-            * id:               encoded user id
-            * current:          current user password
-            * token:            temporary token to change password (instead of id and current)
-            * password:         new password
-            * confirm:          new password (confirmation)
-        """
-        payload = payload or {}
-        user, message = self.user_manager.change_password(trans, **payload)
-        if user is None:
-            return self.message_exception(trans, message)
-        if getattr(trans, "auth_session", None) is None or payload.get("token"):
-            trans.handle_user_login(user)
-        return {"message": "Password has been changed."}
+        return auth_api.change_password(trans=trans, payload=payload or kwd)
 
     @expose_api_anonymous_and_sessionless
     def reset_password(self, trans, payload=None, **kwd):
-        """Reset the user's password. Send an email with token that allows a password change."""
-        payload = payload or {}
-        if message := self.user_manager.send_reset_email(trans, payload):
-            return self.message_exception(trans, message)
-        return {"message": "If an account exists for this email address a confirmation email will be dispatched."}
+        return auth_api.reset_password(trans=trans, payload=payload or kwd)
 
     def __get_redirect_url(self, redirect):
         if not redirect or redirect == "None":

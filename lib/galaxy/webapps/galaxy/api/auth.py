@@ -453,6 +453,26 @@ def register(payload: Optional[dict[str, Any]] = Body(default=None), trans: Sess
     return _issue_browser_auth_for_user(trans, user)
 
 
+@router.post("/auth/change_password", summary="Change the current user's password")
+def change_password(payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans):
+    payload = payload or {}
+    user, message = _get_user_manager(trans).change_password(trans, **payload)
+    if user is None:
+        return _error_payload(message)
+    if trans.auth_session is None or payload.get("token"):
+        return _issue_browser_auth_for_user(trans, user, message=message)
+    return {"message": message}
+
+
+@router.post("/auth/reset_password", summary="Request a password reset email")
+def reset_password(payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans):
+    payload = payload or {}
+    message = _get_user_manager(trans).send_reset_email(trans, payload)
+    if message:
+        return _error_payload(message)
+    return {"message": "If an account exists for this email address a confirmation email will be dispatched."}
+
+
 @router.post("/auth/logout", summary="Logout current browser auth session")
 def logout(trans: SessionRequestContext = DependsOnTrans, logout_all: bool = False):
     auth_session = trans.auth_session

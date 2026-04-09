@@ -28,9 +28,6 @@ let postRequests: PostRequest[] = [];
 
 async function mountLoginForm() {
     const wrapper = mount(MountTarget as object, {
-        propsData: {
-            sessionCsrfToken: "sessionCsrfToken",
-        },
         localVue,
         router,
         stubs: {

@@ -301,6 +301,7 @@ class MockAppConfig(GalaxyDataTestConfig, CommonConfigurationMixin):
         self.max_discovered_files = 10000
         self.display_builtin_converters = True
         self.enable_notification_system = True
+        self.log_events = False
         self.config_dict = self.dict()
 
     def __getattr__(self, name):

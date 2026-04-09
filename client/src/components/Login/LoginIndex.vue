@@ -2,7 +2,6 @@
 import LoginForm from "@/components/Login/LoginForm.vue";
 
 interface Props {
-    sessionCsrfToken: string;
     redirect?: string;
     termsUrl?: string;
     welcomeUrl?: string;
@@ -32,7 +31,6 @@ withDefaults(defineProps<Props>(), {
             :enable-oidc="enableOidc"
             :redirect="redirect"
             :registration-warning-message="registrationWarningMessage"
-            :session-csrf-token="sessionCsrfToken"
             :show-welcome-with-login="showWelcomeWithLogin"
             :terms-url="termsUrl"
             :welcome-url="welcomeUrl"
