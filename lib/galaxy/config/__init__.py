@@ -747,6 +747,7 @@ class GalaxyAppConfiguration(BaseAppConfiguration, CommonConfigurationMixin):
     file_source_temp_dir: str
     galaxy_data_manager_data_path: str
     galaxy_infrastructure_url: str
+    galaxy_jwt_signing_private_key_file: Optional[str]
     hours_between_check: int
     hash_function: HashFunctionNameEnum
     integrated_tool_panel_config: str

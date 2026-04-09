@@ -2087,6 +2087,12 @@ galaxy:
   # time; print(time.time())' | md5sum | cut -f 1 -d ' '
   #id_secret: USING THE DEFAULT IS NOT SECURE!
 
+  # PEM-encoded RSA private key used to sign Galaxy-issued JWT access tokens.
+  # If unset, Galaxy will generate an ephemeral in-memory signing keypair at startup.
+  # That is acceptable for tests and development, but production deployments should
+  # set a stable key file so external clients can validate Galaxy-issued tokens via JWKS.
+  #galaxy_jwt_signing_private_key_file: galaxy-jwt-signing-private-key.pem
+
   # User authentication can be delegated to an upstream proxy server
   # (usually Apache).  The upstream proxy should set a REMOTE_USER
   # header in the request. Enabling remote user disables regular logins.
@@ -3231,4 +3237,3 @@ galaxy:
   # Enable beta tool formats (yaml, cwl, ...) which is a prerequisite
   # for user defined tools.
   #enable_beta_tool_formats: false
-

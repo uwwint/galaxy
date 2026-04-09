@@ -2725,6 +2725,16 @@ mapping:
           One simple way to generate a value for this is with the shell command:
             python -c 'from __future__ import print_function; import time; print(time.time())' | md5sum | cut -f 1 -d ' '
 
+      galaxy_jwt_signing_private_key_file:
+        type: str
+        required: false
+        path_resolves_to: config_dir
+        desc: |
+          PEM-encoded RSA private key used to sign Galaxy-issued JWT access tokens.
+          If unset, Galaxy will generate an ephemeral in-memory signing keypair at startup.
+          That is acceptable for tests and development, but production deployments should
+          set a stable key file so external clients can validate Galaxy-issued tokens via JWKS.
+
       use_remote_user:
         type: bool
         default: false

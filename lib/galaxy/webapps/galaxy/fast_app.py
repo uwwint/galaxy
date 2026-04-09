@@ -84,6 +84,7 @@ api_tags_metadata = [
     {"name": "default"},
     {"name": "users"},
     {"name": "jobs"},
+    {"name": "discovery", "description": "Galaxy issuer metadata and JWT verification keys."},
     {"name": "roles"},
     {"name": "quotas"},
     {"name": "visualizations"},

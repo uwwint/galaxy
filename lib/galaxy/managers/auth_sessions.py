@@ -1,15 +1,28 @@
 import hashlib
+import json
 import logging
 import secrets
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import (
     datetime,
     timedelta,
     timezone,
 )
-from typing import Optional
+from functools import cached_property
+from typing import (
+    Any,
+    Optional,
+)
 
 import jwt
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric.rsa import (
+    RSAPrivateKey,
+    RSAPublicKey,
+)
+from jwt.algorithms import RSAAlgorithm
 from sqlalchemy import (
     select,
     true,
@@ -35,10 +48,20 @@ TOOL_RUNNER_TOKEN_COOKIE_NAME = "galaxy_tool_runner_token"
 TOOL_RUNNER_TOKEN_COOKIE_PATH = "/tool_runner"
 
 log = logging.getLogger(__name__)
+JWT_SIGNING_ALGORITHM = "RS256"
+JWT_SIGNING_PRIVATE_KEY_FILE_OPTION = "galaxy_jwt_signing_private_key_file"
 
 
 def _utcnow() -> datetime:
     return datetime.utcnow()
+
+
+@dataclass(frozen=True)
+class GalaxyJwtKeyPair:
+    private_key: RSAPrivateKey
+    public_key: RSAPublicKey
+    kid: str
+    jwk: dict[str, Any]
 
 
 class AuthSessionManager:
@@ -166,8 +189,8 @@ class AuthSessionManager:
         try:
             payload = jwt.decode(
                 access_token,
-                key=self.security.id_secret,
-                algorithms=["HS256"],
+                key=self._jwt_key_pair.public_key,
+                algorithms=[JWT_SIGNING_ALGORITHM],
                 audience=self._token_audience(),
                 issuer=self._token_issuer(),
             )
@@ -249,7 +272,12 @@ class AuthSessionManager:
             payload["email"] = user.email
             if user.username:
                 payload["preferred_username"] = user.username
-        return jwt.encode(payload, key=self.security.id_secret, algorithm="HS256")
+        return jwt.encode(
+            payload,
+            key=self._jwt_key_pair.private_key,
+            algorithm=JWT_SIGNING_ALGORITHM,
+            headers={"kid": self._jwt_key_pair.kid},
+        )
 
     def _subject(self, auth_session: AuthSession) -> str:
         if auth_session.user_id is not None:
@@ -262,6 +290,24 @@ class AuthSessionManager:
 
     def _token_audience(self) -> str:
         return self._token_issuer()
+
+    def get_authorization_server_metadata(self) -> dict[str, str]:
+        issuer = self._token_issuer()
+        return {
+            "issuer": issuer,
+            "jwks_uri": f"{issuer}/.well-known/jwks.json",
+        }
+
+    def get_jwks(self) -> dict[str, list[dict[str, Any]]]:
+        return {"keys": [self._jwt_key_pair.jwk]}
+
+    @cached_property
+    def _jwt_key_pair(self) -> GalaxyJwtKeyPair:
+        private_key_file = self.app.config.get(JWT_SIGNING_PRIVATE_KEY_FILE_OPTION, None)
+        if private_key_file:
+            return self._load_jwt_key_pair_from_file(private_key_file)
+        log.warning("Galaxy JWT signing private key is not configured; generating an ephemeral in-memory RSA keypair.")
+        return self._generate_jwt_key_pair()
 
     def _session_from_refresh_token(self, refresh_token: str) -> AuthSession:
         try:
@@ -301,3 +347,40 @@ class AuthSessionManager:
     @staticmethod
     def _hash_token(token: str) -> str:
         return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def _load_jwt_key_pair_from_file(self, private_key_file: str) -> GalaxyJwtKeyPair:
+        try:
+            with open(private_key_file, "rb") as handle:
+                private_key = serialization.load_pem_private_key(handle.read(), password=None)
+        except OSError as exc:
+            raise exceptions.ConfigurationError(
+                f"Galaxy JWT signing private key file could not be read: {private_key_file}"
+            ) from exc
+        if not isinstance(private_key, RSAPrivateKey):
+            raise exceptions.ConfigurationError(
+                "Galaxy JWT signing private key must be an RSA private key in PEM format."
+            )
+        return self._build_jwt_key_pair(private_key)
+
+    def _generate_jwt_key_pair(self) -> GalaxyJwtKeyPair:
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+        return self._build_jwt_key_pair(private_key)
+
+    def _build_jwt_key_pair(self, private_key: RSAPrivateKey) -> GalaxyJwtKeyPair:
+        public_key = private_key.public_key()
+        public_key_bytes = public_key.public_bytes(
+            encoding=serialization.Encoding.DER,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        kid = hashlib.sha256(public_key_bytes).hexdigest()
+        jwk = json.loads(RSAAlgorithm.to_jwk(public_key))
+        jwk["alg"] = JWT_SIGNING_ALGORITHM
+        jwk["kid"] = kid
+        jwk["use"] = "sig"
+        jwk.pop("key_ops", None)
+        return GalaxyJwtKeyPair(
+            private_key=private_key,
+            public_key=public_key,
+            kid=kid,
+            jwk=jwk,
+        )

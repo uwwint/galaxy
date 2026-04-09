@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+import jwt
 import pytest
 
 from galaxy import (
@@ -80,8 +81,11 @@ class TestAuthSessionManager(BaseTestCase):
             auth_session, scopes=["api:*"], expires_in=DEFAULT_ACCESS_TOKEN_LIFETIME
         )
 
+        header = jwt.get_unverified_header(access_token)
         payload = self.auth_session_manager.decode_access_token(access_token, required_scopes=["api:*"])
 
+        assert header["alg"] == "RS256"
+        assert header["kid"]
         assert payload["sid"] == str(auth_session.id)
         assert payload["user_id"] == str(self.admin_user.id)
         assert "api:*" in payload["scope"].split()
@@ -109,3 +113,19 @@ class TestAuthSessionManager(BaseTestCase):
 
         with pytest.raises(exceptions.AuthenticationFailed):
             self.auth_session_manager.get_session_for_refresh_token(refresh_token)
+
+    def test_authorization_server_metadata_exposes_jwks_uri(self):
+        metadata = self.auth_session_manager.get_authorization_server_metadata()
+
+        assert metadata["issuer"]
+        assert metadata["jwks_uri"] == f'{metadata["issuer"]}/.well-known/jwks.json'
+
+    def test_jwks_contains_rsa_key(self):
+        jwks = self.auth_session_manager.get_jwks()
+
+        assert len(jwks["keys"]) == 1
+        jwk = jwks["keys"][0]
+        assert jwk["kty"] == "RSA"
+        assert jwk["use"] == "sig"
+        assert jwk["alg"] == "RS256"
+        assert jwk["kid"]
