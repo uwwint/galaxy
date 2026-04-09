@@ -29,6 +29,10 @@ DEFAULT_REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME = timedelta(hours=1)
 REFRESH_TOKEN_KIND = "auth_refresh"
 AUTH_SESSION_COOKIE_NAME = "galaxy_refresh_token"
+AUTH_SESSION_CSRF_COOKIE_NAME = "galaxy_refresh_csrf_token"
+AUTH_SESSION_COOKIE_PATH = "/auth"
+TOOL_RUNNER_TOKEN_COOKIE_NAME = "galaxy_tool_runner_token"
+TOOL_RUNNER_TOKEN_COOKIE_PATH = "/tool_runner"
 
 log = logging.getLogger(__name__)
 
@@ -177,6 +181,10 @@ class AuthSessionManager:
                     f"Galaxy access token is missing required scopes: {', '.join(missing_scopes)}."
                 )
         return payload
+
+    def get_access_token_scopes(self, access_token: str) -> set[str]:
+        payload = self.decode_access_token(access_token)
+        return set((payload.get("scope") or "").split())
 
     def is_galaxy_access_token(self, access_token: str) -> bool:
         """Return True if the token is one of Galaxy's own browser/access JWTs.

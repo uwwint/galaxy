@@ -8,7 +8,16 @@ from markupsafe import escape
 
 import galaxy.util
 from galaxy import web
-from galaxy.model import HistoryDatasetAssociation
+from galaxy.exceptions import AuthenticationFailed
+from galaxy.managers.auth_sessions import (
+    DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME,
+    TOOL_RUNNER_TOKEN_COOKIE_NAME,
+    TOOL_RUNNER_TOKEN_COOKIE_PATH,
+)
+from galaxy.model import (
+    AuthSession,
+    HistoryDatasetAssociation,
+)
 from galaxy.tools import DataSourceTool
 from galaxy.web import (
     error,
@@ -17,6 +26,48 @@ from galaxy.web import (
 from galaxy.webapps.base.controller import BaseUIController
 
 log = logging.getLogger(__name__)
+
+
+def _tool_runner_token_tool_ids(trans, tool_id: str) -> set[str]:
+    cookie_token = trans.get_cookie(name=TOOL_RUNNER_TOKEN_COOKIE_NAME)
+    if not cookie_token:
+        return {tool_id}
+    try:
+        existing_scopes = trans.app.auth_session_manager.get_access_token_scopes(cookie_token)
+    except AuthenticationFailed:
+        return {tool_id}
+    tool_ids = {tool_id}
+    for scope in existing_scopes:
+        if scope.startswith("tool_runner:"):
+            tool_ids.add(scope.split(":", 1)[1])
+    return tool_ids
+
+
+def _set_tool_runner_token_cookie(trans, token: str) -> None:
+    max_age = int(DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME.total_seconds())
+    trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME] = token
+    trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["path"] = TOOL_RUNNER_TOKEN_COOKIE_PATH
+    trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["max-age"] = max_age
+    trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["version"] = "1"
+    if trans.request.environ.get("wsgi.url_scheme") == "https":
+        trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["secure"] = True
+    trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["httponly"] = True
+    trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["samesite"] = "None"
+    if trans.app.config.cookie_domain is not None:
+        trans.response.cookies[TOOL_RUNNER_TOKEN_COOKIE_NAME]["domain"] = trans.app.config.cookie_domain
+
+
+def _resolve_tool_runner_auth_session(trans, tool_id: str) -> AuthSession | None:
+    cookie_token = trans.get_cookie(name=TOOL_RUNNER_TOKEN_COOKIE_NAME)
+    if cookie_token:
+        try:
+            return trans.app.auth_session_manager.get_session_for_access_token(
+                cookie_token,
+                required_scopes=[f"tool_runner:{tool_id}"],
+            )
+        except AuthenticationFailed:
+            return None
+    return trans.auth_session
 
 
 class ToolRunner(BaseUIController):
@@ -89,6 +140,10 @@ class ToolRunner(BaseUIController):
         else:
             test_params = params
         if tool.tool_type == "data_source":
+            auth_session = _resolve_tool_runner_auth_session(trans, tool_id)
+            if auth_session is None:
+                error("A browser auth session is required for this data source tool.")
+            trans.auth_session = auth_session
             if "URL" not in test_params:
                 error("Execution of `data_source` tools requires a `URL` parameter")
             # preserve original params sent by the remote server as extra dict
@@ -179,6 +234,17 @@ class ToolRunner(BaseUIController):
             return trans.show_error_message(f"Tool '{escape(tool_id)}' does not exist.")
 
         if isinstance(tool, DataSourceTool):
+            auth_session = _resolve_tool_runner_auth_session(trans, tool.id)
+            if auth_session is None:
+                error("A browser auth session is required for this data source tool.")
+            trans.auth_session = auth_session
+            token_tool_ids = _tool_runner_token_tool_ids(trans, tool.id)
+            tool_runner_token = trans.app.auth_session_manager.mint_tool_runner_token(
+                auth_session,
+                tool_ids=token_tool_ids,
+                expires_in=DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME,
+            )
+            _set_tool_runner_token_cookie(trans, tool_runner_token)
             link = url_for(tool.action, **tool.get_static_param_values(trans))
         else:
             link = url_for(controller="tool_runner", tool_id=tool.id)

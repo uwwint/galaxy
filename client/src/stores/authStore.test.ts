@@ -22,10 +22,12 @@ describe("authStore", () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         vi.mocked(axios.post).mockReset();
+        document.cookie = "galaxy_refresh_csrf_token=; Max-Age=0; path=/";
     });
 
     it("bootstraps access token state from the backend response", async () => {
         const accessToken = makeAccessToken();
+        document.cookie = "galaxy_refresh_csrf_token=csrf-token";
         vi.mocked(axios.post).mockResolvedValue({
             data: {
                 access_token: accessToken,
@@ -40,13 +42,16 @@ describe("authStore", () => {
         const authStore = useAuthStore();
         await authStore.bootstrap();
 
-        expect(axios.post).toHaveBeenCalledWith("/auth/bootstrap", null, undefined);
+        expect(axios.post).toHaveBeenCalledWith("/auth/bootstrap", null, {
+            headers: { "X-CSRF-Token": "csrf-token" },
+        });
         expect(authStore.accessToken).toBe(accessToken);
         expect(authStore.isAuthenticated).toBe(true);
         expect(authStore.currentHistoryId).toBe("encoded-history");
     });
 
     it("clears auth state on logout", async () => {
+        document.cookie = "galaxy_refresh_csrf_token=csrf-token";
         vi.mocked(axios.post).mockResolvedValue({
             data: {
                 message: "Success.",
@@ -60,6 +65,7 @@ describe("authStore", () => {
         await authStore.logout();
 
         expect(axios.post).toHaveBeenCalledWith("/auth/logout", null, {
+            headers: { "X-CSRF-Token": "csrf-token" },
             params: {
                 logout_all: false,
             },

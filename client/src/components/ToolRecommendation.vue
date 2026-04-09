@@ -123,7 +123,7 @@ export default {
                 }
                 const tId = d.data.id;
                 if (tId !== undefined && tId !== "undefined" && tId !== null && tId !== "") {
-                    document.location.href = `${getAppRoot()}tool_runner?tool_id=${tId}`;
+                    document.location.href = `${getAppRoot()}auth/tool_runner?tool_id=${tId}`;
                 }
             };
             const update = (source) => {

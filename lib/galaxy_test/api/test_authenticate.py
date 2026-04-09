@@ -30,32 +30,23 @@ class TestAuthenticateApi(ApiTestCase):
     @skip_without_tool("test_data_source")
     def test_tool_runner_session_cookie_handling(self):
         response = get(self.url)
-        tool_runner_session_cookie = response.cookies["galaxytoolrunnersession"]
-        galaxy_session_cookie = response.cookies["galaxysession"]
-        assert tool_runner_session_cookie != galaxy_session_cookie
-        root_response = get(self.url, cookies={"galaxytoolrunnersession": tool_runner_session_cookie})
-        root_response.raise_for_status()
-        # Browser will only send cookie to /tool_runner path, but let's make sure it isn't accepted.
-        # Galaxy responds with a new session and sessioncookie in that case.
-        # (We might want to redirect to the login page instead if require_login is set?)
-        assert root_response.cookies["galaxysession"] != galaxy_session_cookie
+        assert "galaxy_refresh_token" in response.cookies
+        response = get(
+            urljoin(self.url, "auth/tool_runner?tool_id=test_data_source"),
+            cookies=response.cookies,
+            allow_redirects=False,
+        )
+        assert "galaxy_tool_runner_token" in response.cookies
+        assert response.headers["Location"].endswith("/tool_runner/data_source_redirect?tool_id=test_data_source")
         tool_runner_response = get(
-            urljoin(self.url, "tool_runner?tool_id=test_data_source"),
-            cookies={"galaxytoolrunnersession": tool_runner_session_cookie},
+            urljoin(self.url, "tool_runner/data_source_redirect?tool_id=test_data_source"),
+            cookies=response.cookies,
+            allow_redirects=False,
         )
         tool_runner_response.raise_for_status()
-        # Verify that we're not returning the sessioncookie
-        assert "galaxysession" not in tool_runner_response.cookies
-        # Verify text message
-        text = tool_runner_response.text
-        assert "A job has been successfully added to the queue." in text
-        # Make sure history for original session received job
-        current_history_json_response = get(
-            urljoin(self.url, "history/current_history_json"), cookies={"galaxysession": galaxy_session_cookie}
-        )
-        current_history_json_response.raise_for_status()
-        current_history = current_history_json_response.json()
-        assert current_history["contents_active"]["active"] == 1
+        assert tool_runner_response.status_code in (302, 307)
+        assert "galaxy_tool_runner_token" in tool_runner_response.cookies
+        assert tool_runner_response.headers["Location"].startswith("http")
 
     def test_anon_history_creation(self):
         # First request:

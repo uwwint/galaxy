@@ -31,7 +31,10 @@ from galaxy.exceptions import (
     RequestParameterMissingException,
 )
 from galaxy.managers import context
-from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
+from galaxy.managers.auth_sessions import (
+    AUTH_SESSION_COOKIE_NAME,
+    AUTH_SESSION_COOKIE_PATH,
+)
 from galaxy.managers.users import UserManager
 from galaxy.model import (
     AuthSession,
@@ -89,8 +92,6 @@ UCSC_SERVERS = (
     "hgw7.soe.ucsc.edu",
     "hgw8.soe.ucsc.edu",
 )
-
-TOOL_RUNNER_SESSION_COOKIE = "galaxytoolrunnersession"
 
 
 class WebApplication(base.WebApplication):
@@ -664,8 +665,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
 
     @property
     def cookie_path(self):
-        # Cookies for non-root paths should not end with `/` -> https://stackoverflow.com/questions/36131023/setting-a-slash-on-cookie-path
-        return (self.app.config.cookie_path or url_for("/")).rstrip("/") or "/"
+        return AUTH_SESSION_COOKIE_PATH
 
     def check_user_library_import_dir(self, user: User) -> None:
         if self.app.config.get("user_library_import_dir_auto_creation", False):

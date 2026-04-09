@@ -129,7 +129,7 @@ export const useToolStore = defineStore("toolStore", () => {
             const tool = toolsById.value[toolId];
             const appRoot = getAppRoot();
             if (tool && tool.model_class === "DataSourceTool") {
-                return `${appRoot}tool_runner/data_source_redirect?tool_id=${encodeURIComponent(toolId)}`;
+                return `${appRoot}auth/tool_runner?tool_id=${encodeURIComponent(toolId)}`;
             } else if (tool?.model_class) {
                 return `${appRoot}?tool_id=${encodeURIComponent(toolId)}&version=latest`;
             } else {

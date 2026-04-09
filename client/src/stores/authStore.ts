@@ -42,6 +42,7 @@ interface RegisterPayload {
 }
 
 const REFRESH_SKEW_MS = 30_000;
+const AUTH_REFRESH_CSRF_COOKIE_NAME = "galaxy_refresh_csrf_token";
 
 function decodeBase64Url(value: string): string {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -60,6 +61,15 @@ function tokenExpiresAt(accessToken: string): number | null {
     } catch {
         return null;
     }
+}
+
+function readCookieValue(name: string): string | null {
+    if (typeof document === "undefined") {
+        return null;
+    }
+    const escapedName = name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1");
+    const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
 }
 
 export const useAuthStore = defineStore("authStore", () => {
@@ -160,7 +170,12 @@ export const useAuthStore = defineStore("authStore", () => {
         payload: Record<string, unknown> | null = null,
         params: Record<string, unknown> | null = null,
     ): Promise<T> {
-        const response = await axios.post(withPrefix(path), payload, params ? { params } : undefined);
+        const csrfToken = readCookieValue(AUTH_REFRESH_CSRF_COOKIE_NAME);
+        const config = {
+            ...(params ? { params } : {}),
+            ...(csrfToken ? { headers: { "X-CSRF-Token": csrfToken } } : {}),
+        };
+        const response = await axios.post(withPrefix(path), payload, Object.keys(config).length ? config : undefined);
         if (response.data?.err_msg) {
             throw new Error(response.data.err_msg);
         }

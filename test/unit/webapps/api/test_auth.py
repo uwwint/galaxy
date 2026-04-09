@@ -5,7 +5,11 @@ from datetime import (
 
 from galaxy import model
 from galaxy.app_unittest_utils import galaxy_mock
-from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
+from galaxy.managers.auth_sessions import (
+    AUTH_SESSION_COOKIE_NAME,
+    AUTH_SESSION_COOKIE_PATH,
+    AUTH_SESSION_CSRF_COOKIE_NAME,
+)
 from galaxy.managers.users import UserManager
 from galaxy.webapps.galaxy.api.auth import (
     bootstrap,
@@ -15,6 +19,7 @@ from galaxy.webapps.galaxy.api.auth import (
     refresh,
     register,
     reset_password,
+    tool_runner,
 )
 from galaxy.work.context import (
     GalaxyAbstractRequest,
@@ -24,8 +29,9 @@ from galaxy.work.context import (
 
 
 class MockRequest(GalaxyAbstractRequest):
-    def __init__(self):
-        self._headers = {}
+    def __init__(self, headers=None, cookies=None):
+        self._headers = headers or {}
+        self._cookies = cookies or {}
 
     @property
     def base(self) -> str:
@@ -44,7 +50,7 @@ class MockRequest(GalaxyAbstractRequest):
         return False
 
     def get_cookie(self, name):
-        return None
+        return self._cookies.get(name)
 
     @property
     def url(self):
@@ -99,7 +105,16 @@ class MockResponse(GalaxyAbstractResponse):
 
 
 def _build_trans(
-    app, *, user=None, actor_user=None, history=None, galaxy_session=None, auth_session=None, auth_source=None
+    app,
+    *,
+    user=None,
+    actor_user=None,
+    history=None,
+    galaxy_session=None,
+    auth_session=None,
+    auth_source=None,
+    headers=None,
+    cookies=None,
 ):
     return SessionRequestContext(
         app=app,
@@ -110,7 +125,7 @@ def _build_trans(
         auth_session=auth_session,
         auth_source=auth_source,
         url_builder=lambda *args, **kwargs: "/mock/url",
-        request=MockRequest(),
+        request=MockRequest(headers=headers, cookies=cookies),
         response=MockResponse(),
     )
 
@@ -122,6 +137,13 @@ def _cookie_value(trans, key):
     return None
 
 
+def _cookie(trans, key):
+    for cookie in reversed(trans.response.cookies):
+        if cookie["key"] == key:
+            return cookie
+    return None
+
+
 def _make_auth_session(app, user, auth_source="galaxy_token", issue_refresh=False):
     auth_session = app.auth_session_manager.create_session(user=user, auth_source=auth_source)
     refresh_token = None
@@ -130,13 +152,18 @@ def _make_auth_session(app, user, auth_source="galaxy_token", issue_refresh=Fals
     return auth_session, refresh_token
 
 
+def _make_csrf_request_state(token="csrf-token"):
+    return {"X-CSRF-Token": token}, {AUTH_SESSION_CSRF_COOKIE_NAME: token}
+
+
 def test_bootstrap_creates_auth_session():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
     history = model.History(user=user)
     app.model.session.add(history)
     app.model.session.commit()
-    trans = _build_trans(app, user=user, history=history, auth_source="galaxy_token")
+    headers, cookies = _make_csrf_request_state()
+    trans = _build_trans(app, user=user, history=history, auth_source="galaxy_token", headers=headers, cookies=cookies)
 
     payload = bootstrap(trans=trans)
 
@@ -144,6 +171,8 @@ def test_bootstrap_creates_auth_session():
     assert payload["access_token"] is not None
     assert payload["auth_source"] == "galaxy_token"
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
+    assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
+    assert _cookie(trans, AUTH_SESSION_COOKIE_NAME)["path"] == AUTH_SESSION_COOKIE_PATH
     assert trans.auth_session is not None
 
 
@@ -151,7 +180,15 @@ def test_refresh_rotates_cookie_for_existing_auth_session():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
     auth_session, old_refresh_token = _make_auth_session(app, user, issue_refresh=True)
-    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
+    headers, cookies = _make_csrf_request_state()
+    trans = _build_trans(
+        app,
+        user=user,
+        auth_session=auth_session,
+        auth_source="galaxy_token",
+        headers=headers,
+        cookies=cookies,
+    )
 
     payload = refresh(trans=trans)
 
@@ -159,6 +196,7 @@ def test_refresh_rotates_cookie_for_existing_auth_session():
     new_refresh_token = _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
     assert new_refresh_token
     assert new_refresh_token != old_refresh_token
+    assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
 
 
 def test_login_issues_browser_auth_state():
@@ -176,6 +214,7 @@ def test_login_issues_browser_auth_state():
     assert response["auth_source"] == "galaxy_token"
     assert response["user"]["email"] == user.email
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
+    assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
     assert trans.auth_session is not None
     assert trans.user == user
     assert history.user == user
@@ -200,6 +239,7 @@ def test_register_issues_browser_auth_state():
     assert response["auth_source"] == "galaxy_token"
     assert response["user"]["email"] == "new@example.org"
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
+    assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
     assert trans.auth_session is not None
     assert trans.user is not None
 
@@ -275,7 +315,15 @@ def test_logout_invalidates_current_auth_session_and_clears_cookie():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
     auth_session, _ = _make_auth_session(app, user, issue_refresh=True)
-    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
+    headers, cookies = _make_csrf_request_state()
+    trans = _build_trans(
+        app,
+        user=user,
+        auth_session=auth_session,
+        auth_source="galaxy_token",
+        headers=headers,
+        cookies=cookies,
+    )
 
     response = logout(trans=trans)
 
@@ -283,3 +331,18 @@ def test_logout_invalidates_current_auth_session_and_clears_cookie():
     refreshed = app.auth_session_manager.get_session_by_id(auth_session.id)
     assert refreshed is None
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME) == ""
+    assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME) == ""
+
+
+def test_tool_runner_redirect_issues_path_scoped_cookie():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
+    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
+
+    response = tool_runner(trans=trans, tool_id="biomart")
+
+    assert response.headers["location"].endswith("/tool_runner/data_source_redirect?tool_id=biomart")
+    cookie_headers = response.headers.getlist("set-cookie")
+    assert any("galaxy_tool_runner_token=" in header for header in cookie_headers)
+    assert any("Path=/tool_runner" in header for header in cookie_headers)

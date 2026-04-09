@@ -1,3 +1,4 @@
+import secrets
 from collections.abc import Iterable
 from datetime import (
     datetime,
@@ -8,7 +9,11 @@ from typing import (
     Optional,
 )
 
-from fastapi import Body
+from fastapi import (
+    Body,
+    Query,
+)
+from fastapi.responses import RedirectResponse
 from markupsafe import escape
 
 from galaxy import util
@@ -16,7 +21,14 @@ from galaxy.exceptions import (
     AuthenticationFailed,
     Conflict,
 )
-from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
+from galaxy.managers.auth_sessions import (
+    AUTH_SESSION_COOKIE_NAME,
+    AUTH_SESSION_COOKIE_PATH,
+    AUTH_SESSION_CSRF_COOKIE_NAME,
+    DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME,
+    TOOL_RUNNER_TOKEN_COOKIE_NAME,
+    TOOL_RUNNER_TOKEN_COOKIE_PATH,
+)
 from galaxy.managers.users import UserManager
 from galaxy.model import (
     AuthSession,
@@ -37,15 +49,23 @@ router = Router(tags=["auth"])
 
 
 def _cookie_path(trans: SessionRequestContext) -> str:
-    return (trans.app.config.cookie_path or "/").rstrip("/") or "/"
+    return AUTH_SESSION_COOKIE_PATH
 
 
 def _cookie_domain(trans: SessionRequestContext) -> Optional[str]:
     return trans.app.config.cookie_domain
 
 
+def _csrf_cookie_path() -> str:
+    return "/"
+
+
 def _request_headers(trans: SessionRequestContext) -> Any:
     return trans.request.headers
+
+
+def _request_cookie(trans: SessionRequestContext, name: str) -> Optional[str]:
+    return trans.request.get_cookie(name)
 
 
 def _request_remote_host(trans: SessionRequestContext) -> Optional[str]:
@@ -61,6 +81,7 @@ def _request_is_secure(trans: SessionRequestContext) -> bool:
 
 
 def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expires_at: Optional[datetime]) -> None:
+    csrf_token = secrets.token_urlsafe(32)
     max_age = 0
     if expires_at is not None:
         max_age = max(0, int((expires_at - datetime.utcnow()).total_seconds()))
@@ -72,6 +93,16 @@ def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expire
         domain=_cookie_domain(trans),
         secure=_request_is_secure(trans),
         httponly=True,
+        samesite="lax",
+    )
+    trans.response.set_cookie(
+        key=AUTH_SESSION_CSRF_COOKIE_NAME,
+        value=csrf_token,
+        max_age=max_age,
+        path=_csrf_cookie_path(),
+        domain=_cookie_domain(trans),
+        secure=_request_is_secure(trans),
+        httponly=False,
         samesite="lax",
     )
 
@@ -86,6 +117,29 @@ def _clear_refresh_cookie(trans: SessionRequestContext) -> None:
         secure=_request_is_secure(trans),
         httponly=True,
         samesite="lax",
+    )
+    trans.response.set_cookie(
+        key=AUTH_SESSION_CSRF_COOKIE_NAME,
+        value="",
+        max_age=0,
+        path=_csrf_cookie_path(),
+        domain=_cookie_domain(trans),
+        secure=_request_is_secure(trans),
+        httponly=False,
+        samesite="lax",
+    )
+
+
+def _set_tool_runner_cookie(trans: SessionRequestContext, response: RedirectResponse, token: str) -> None:
+    response.set_cookie(
+        key=TOOL_RUNNER_TOKEN_COOKIE_NAME,
+        value=token,
+        max_age=int(DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME.total_seconds()),
+        path=TOOL_RUNNER_TOKEN_COOKIE_PATH,
+        domain=_cookie_domain(trans),
+        secure=_request_is_secure(trans),
+        httponly=True,
+        samesite="none",
     )
 
 
@@ -134,6 +188,28 @@ def _bootstrap_payload(trans: SessionRequestContext, access_token: Optional[str]
         "actor_user": _serialize_user(trans, trans.actor_user),
         "current_history_id": trans.security.encode_id(history.id) if history else None,
     }
+
+
+@router.get("/auth/tool_runner", summary="Prepare tool runner browser auth state")
+def tool_runner(
+    trans: SessionRequestContext = DependsOnTrans,
+    tool_id: str = Query(..., description="Tool identifier for the scoped tool-runner token"),
+) -> RedirectResponse:
+    auth_session = trans.auth_session
+    if auth_session is None:
+        raise AuthenticationFailed("A browser auth session is required to launch a data source tool.")
+    tool_runner_token = trans.app.auth_session_manager.mint_tool_runner_token(auth_session, tool_ids=[tool_id])
+    redirect_url = f"/tool_runner/data_source_redirect?tool_id={tool_id}"
+    response = RedirectResponse(url=redirect_url)
+    _set_tool_runner_cookie(trans, response, tool_runner_token)
+    return response
+
+
+def _require_refresh_csrf(trans: SessionRequestContext) -> None:
+    csrf_header = _request_headers(trans).get("X-CSRF-Token")
+    csrf_cookie = _request_cookie(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
+    if not csrf_header or not csrf_cookie or not secrets.compare_digest(csrf_header, csrf_cookie):
+        raise AuthenticationFailed("Missing or invalid CSRF token.")
 
 
 def _ensure_browser_auth_session(trans: SessionRequestContext) -> Optional[AuthSession]:
@@ -307,6 +383,7 @@ def bootstrap(trans: SessionRequestContext = DependsOnTrans):
     auth_session = _ensure_browser_auth_session(trans)
     if auth_session is None:
         return _bootstrap_payload(trans, access_token=None)
+    _require_refresh_csrf(trans)
     refresh_token = trans.app.auth_session_manager.issue_refresh_token(auth_session)
     _set_refresh_cookie(trans, refresh_token, auth_session.refresh_token_expires_at)
     access_token = trans.app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
@@ -383,6 +460,7 @@ def refresh(trans: SessionRequestContext = DependsOnTrans):
     auth_session = trans.auth_session
     if auth_session is None:
         raise AuthenticationFailed("No active browser auth session.")
+    _require_refresh_csrf(trans)
     refresh_token = trans.app.auth_session_manager.issue_refresh_token(auth_session)
     auth_session = trans.app.auth_session_manager.get_session_by_id(auth_session.id)
     trans.auth_session = auth_session
@@ -438,6 +516,7 @@ def reset_password(
 def logout(trans: SessionRequestContext = DependsOnTrans, logout_all: bool = False):
     auth_session = trans.auth_session
     if auth_session is not None:
+        _require_refresh_csrf(trans)
         auth_session = trans.app.auth_session_manager.get_session_by_id(auth_session.id) or auth_session
         trans.app.auth_session_manager.invalidate_session(auth_session)
         if logout_all and auth_session.user is not None:
