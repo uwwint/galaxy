@@ -337,6 +337,7 @@ class MockTrans:
         self.user_is_admin = True
         self.url_builder = mock_url_builder
 
+        self.auth_session = None
         self.galaxy_session = None
         self.__user = user
         self._actor_user = user
@@ -366,6 +367,8 @@ class MockTrans:
         pass
 
     def get_user(self):
+        if self.auth_session:
+            return self.auth_session.user
         if self.galaxy_session:
             return self.galaxy_session.user
         else:
@@ -373,6 +376,10 @@ class MockTrans:
 
     def set_user(self, user):
         """Set the current user."""
+        if self.auth_session:
+            self.auth_session.user = user
+            self.sa_session.add(self.auth_session)
+            self.sa_session.commit()
         if self.galaxy_session:
             self.galaxy_session.user = user
             self.sa_session.add(self.galaxy_session)
@@ -395,6 +402,9 @@ class MockTrans:
         return self.history
 
     def set_history(self, history):
+        if self.auth_session:
+            self.auth_session.current_history = history
+            self.sa_session.add(self.auth_session)
         self.history = history
 
     def fill_template(self, filename, template_lookup=None, **kwargs):

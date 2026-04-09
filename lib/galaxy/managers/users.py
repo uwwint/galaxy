@@ -526,8 +526,8 @@ class UserManager(base.ModelManager, deletable.PurgableManagerMixin):
                     for other_galaxy_session in trans.sa_session.scalars(stmt):
                         other_galaxy_session.is_valid = False
                         trans.sa_session.add(other_galaxy_session)
-                current_auth_session = getattr(trans, "auth_session", None)
-                auth_session_manager = getattr(self.app, "auth_session_manager", None)
+                current_auth_session = trans.auth_session
+                auth_session_manager = self.app.auth_session_manager
                 if auth_session_manager is not None:
                     exclude_auth_session_id = None
                     if current_auth_session is not None and current_auth_session.user_id == user.id:
