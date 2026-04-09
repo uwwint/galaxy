@@ -188,10 +188,14 @@ def get_auth_session_from_bearer_token(
 ) -> Optional[model.AuthSession]:
     if not bearer_token:
         return None
+    # Galaxy-issued bearer tokens are handled here so they do not fall through
+    # to the trusted-external-OIDC resolver.
+    if not auth_session_manager.is_galaxy_access_token(bearer_token.credentials):
+        return None
     try:
         return auth_session_manager.get_session_for_access_token(bearer_token.credentials)
     except AuthenticationFailed:
-        return None
+        raise
 
 
 def get_api_user(

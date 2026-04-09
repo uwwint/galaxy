@@ -1,5 +1,7 @@
+import pytest
 from fastapi.security import HTTPAuthorizationCredentials
 
+from galaxy import exceptions
 from galaxy.app_unittest_utils import galaxy_mock
 from galaxy.managers.context import RequestIdentity
 from galaxy.managers.users import UserManager
@@ -8,6 +10,7 @@ from galaxy.webapps.galaxy.api import (
     get_auth_session_from_bearer_token,
     get_auth_source,
     get_effective_api_user,
+    get_api_user,
 )
 from galaxy.work.context import WorkRequestContext
 
@@ -96,6 +99,38 @@ def test_galaxy_bearer_token_resolves_auth_session():
     assert resolved_auth_session is not None
     assert resolved_auth_session.id == auth_session.id
     assert resolved_auth_session.user == user
+
+
+def test_invalid_galaxy_bearer_token_does_not_fall_through_to_external_oidc():
+    app = galaxy_mock.MockApp()
+    user_manager = app[UserManager]
+    user = user_manager.create(email="user1@example.org", username="user1", password="password")
+    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
+    access_token = app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+    invalid_access_token = access_token[:-1] + ("A" if access_token[-1] != "A" else "B")
+
+    with pytest.raises(exceptions.AuthenticationFailed):
+        get_auth_session_from_bearer_token(
+            auth_session_manager=app.auth_session_manager,
+            bearer_token=HTTPAuthorizationCredentials(scheme="Bearer", credentials=invalid_access_token),
+        )
+
+
+def test_external_oidc_bearer_token_still_resolves_via_oidc_path(monkeypatch):
+    app = galaxy_mock.MockApp()
+    user_manager = app[UserManager]
+    user = user_manager.create(email="user1@example.org", username="user1", password="password")
+    monkeypatch.setattr(user_manager, "by_oidc_access_token", lambda access_token: user)
+
+    resolved_user = get_api_user(
+        user_manager=user_manager,
+        bearer_auth_session=None,
+        key=None,
+        x_api_key=None,
+        bearer_token=HTTPAuthorizationCredentials(scheme="Bearer", credentials="opaque-external-token"),
+    )
+
+    assert resolved_user == user
 
 
 def test_auth_source_prefers_galaxy_token_over_legacy_session():

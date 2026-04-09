@@ -172,6 +172,30 @@ class AuthSessionManager:
                 )
         return payload
 
+    def is_galaxy_access_token(self, access_token: str) -> bool:
+        """Return True if the token is one of Galaxy's own browser/access JWTs.
+
+        This intentionally does not verify the signature, expiry, audience, or issuer.
+        The method is used only as a cheap classifier so request resolution can decide
+        whether to use the Galaxy auth-session path or fall back to trusted external OIDC
+        bearer-token handling. The real validation happens later in
+        :meth:`decode_access_token` / :meth:`get_session_for_access_token`.
+        """
+        try:
+            payload = jwt.decode(
+                access_token,
+                options={
+                    "verify_signature": False,
+                    "verify_exp": False,
+                    "verify_iat": False,
+                    "verify_aud": False,
+                    "verify_iss": False,
+                },
+            )
+        except jwt.PyJWTError:
+            return False
+        return payload.get("auth_source") == "galaxy_token"
+
     def get_session_for_access_token(
         self, access_token: str, *, required_scopes: Optional[Iterable[str]] = None
     ) -> AuthSession:

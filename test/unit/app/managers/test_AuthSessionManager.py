@@ -86,6 +86,13 @@ class TestAuthSessionManager(BaseTestCase):
         assert payload["user_id"] == str(self.admin_user.id)
         assert "api:*" in payload["scope"].split()
 
+    def test_detects_galaxy_access_tokens(self):
+        auth_session = self.auth_session_manager.create_session(user=self.admin_user, auth_source="galaxy_token")
+        access_token = self.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+
+        assert self.auth_session_manager.is_galaxy_access_token(access_token) is True
+        assert self.auth_session_manager.is_galaxy_access_token("not-a-token") is False
+
     def test_tool_runner_token_requires_matching_scope(self):
         auth_session = self.auth_session_manager.create_session(user=self.admin_user, auth_source="session")
         access_token = self.auth_session_manager.mint_tool_runner_token(auth_session, tool_ids=["biomart", "ucsc"])

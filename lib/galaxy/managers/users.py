@@ -350,6 +350,13 @@ class UserManager(base.ModelManager, deletable.PurgableManagerMixin):
         return provided_key.user
 
     def by_oidc_access_token(self, access_token: str):
+        # This path is only for trusted external OIDC bearer tokens. Galaxy-issued
+        # browser/API JWTs are rejected up front so they cannot be misclassified
+        # as external identity-provider tokens.
+        if hasattr(self.app, "auth_session_manager") and self.app.auth_session_manager.is_galaxy_access_token(
+            access_token
+        ):
+            raise exceptions.AuthenticationFailed("Invalid access token.")
         if hasattr(self.app, "authnz_manager") and self.app.authnz_manager:
             user = self.app.authnz_manager.match_access_token_to_user(self.app.model.session, access_token)
             return user

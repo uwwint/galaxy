@@ -5,8 +5,12 @@ Executable directly using: python -m test.unit.managers.test_UserManager
 """
 
 from datetime import datetime
-from unittest.mock import patch
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
+import pytest
 from sqlalchemy import (
     desc,
     select,
@@ -285,6 +289,26 @@ class TestUserManager(BaseTestCase):
         assert self.user_manager.get_user_by_identity(uppercase_email_user["username"].capitalize()) is None
         # Email lookups should be case-insensitive
         assert self.user_manager.get_user_by_identity(uppercase_email_user["email"].capitalize()) == uppercase_user
+
+    def test_by_oidc_access_token_rejects_galaxy_tokens(self):
+        user = self.user_manager.create(**user2_data)
+        auth_session = self.app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
+        access_token = self.app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+
+        with pytest.raises(exceptions.AuthenticationFailed):
+            self.user_manager.by_oidc_access_token(access_token)
+
+    def test_by_oidc_access_token_uses_external_oidc_resolver(self):
+        user = self.user_manager.create(**user2_data)
+        self.app.authnz_manager = MagicMock()
+        self.app.authnz_manager.match_access_token_to_user.return_value = user
+
+        resolved_user = self.user_manager.by_oidc_access_token("opaque-external-token")
+
+        assert resolved_user == user
+        self.app.authnz_manager.match_access_token_to_user.assert_called_once_with(
+            self.app.model.session, "opaque-external-token"
+        )
 
 
 # =============================================================================
