@@ -49,7 +49,7 @@ describe("LoginForm", () => {
             http.get("/api/configuration", ({ response }) => {
                 return response.untyped(HttpResponse.json({ oidc: { cilogon: false } }));
             }),
-            http.untyped.post(/.*\/user\/login.*/, async ({ request }) => {
+            http.untyped.post(/.*\/auth\/login.*/, async ({ request }) => {
                 const url = request.url;
                 const data = (await request.json()) as Record<string, unknown>;
                 postRequests.push({ url, data });
@@ -169,7 +169,7 @@ describe("LoginForm", () => {
         expect(postRequests.length).toBe(1);
         expect(postRequests[0]?.data.login).toBe(external_email);
         expect(postRequests[0]?.data.password).toBe("test_pwd");
-        expect(postRequests[0]?.url).toContain("/user/login");
+        expect(postRequests[0]?.url).toContain("/auth/login");
 
         // Restore original search
         Object.defineProperty(window.location, "search", {

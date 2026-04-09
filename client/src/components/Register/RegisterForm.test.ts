@@ -71,6 +71,7 @@ describe("RegisterForm", () => {
         expect(postRequests.length).toBe(1);
         expect(postRequests[0]?.data.email).toBe("test_user");
         expect(postRequests[0]?.data.password).toBe("test_pwd");
+        expect(postRequests[0]?.url).toContain("/auth/register");
     });
 
     // TODO: Changing the original `<a>` to a `GLink` has made it so that the link never appears in the wrapper.

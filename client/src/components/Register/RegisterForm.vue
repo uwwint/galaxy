@@ -73,7 +73,7 @@ async function submit() {
     disableCreate.value = true;
 
     try {
-        const response = await axios.post(withPrefix("/user/create"), {
+        const response = await axios.post(withPrefix("/auth/register"), {
             email: email.value,
             username: username.value,
             password: password.value,
@@ -81,6 +81,10 @@ async function submit() {
             subscribe: subscribe.value,
             session_csrf_token: props.sessionCsrfToken,
         });
+
+        if (response.data?.err_msg) {
+            throw new Error(response.data.err_msg);
+        }
 
         if (response.data.message && response.data.status) {
             Toast.info(response.data.message);

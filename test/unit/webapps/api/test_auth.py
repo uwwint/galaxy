@@ -3,7 +3,9 @@ from galaxy.app_unittest_utils import galaxy_mock
 from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
 from galaxy.webapps.galaxy.api.auth import (
     bootstrap,
+    login,
     logout,
+    register,
     refresh,
 )
 from galaxy.work.context import (
@@ -145,6 +147,51 @@ def test_refresh_rotates_cookie_for_existing_auth_session():
     new_refresh_token = _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
     assert new_refresh_token
     assert new_refresh_token != old_refresh_token
+
+
+def test_login_issues_browser_auth_state():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    history = model.History()
+    galaxy_session = model.GalaxySession(session_key="a" * 32, is_valid=True)
+    galaxy_session.current_history = history
+    app.model.session.add_all((history, galaxy_session))
+    app.model.session.commit()
+    trans = _build_trans(app, history=history, galaxy_session=galaxy_session, auth_source="session")
+
+    response = login(trans=trans, payload={"login": "user", "password": "password"})
+
+    assert response["message"] == "Success."
+    assert response["access_token"] is not None
+    assert response["auth_source"] == "galaxy_token"
+    assert response["user"]["email"] == user.email
+    assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
+    assert trans.auth_session is not None
+    assert trans.user == user
+    assert history.user == user
+
+
+def test_register_issues_browser_auth_state():
+    app = galaxy_mock.MockApp()
+    trans = _build_trans(app, auth_source="anonymous")
+
+    response = register(
+        trans=trans,
+        payload={
+            "email": "new@example.org",
+            "username": "newuser",
+            "password": "password",
+            "confirm": "password",
+        },
+    )
+
+    assert response["message"] == "Success."
+    assert response["access_token"] is not None
+    assert response["auth_source"] == "galaxy_token"
+    assert response["user"]["email"] == "new@example.org"
+    assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
+    assert trans.auth_session is not None
+    assert trans.user is not None
 
 
 def test_logout_invalidates_current_auth_session_and_clears_cookie():

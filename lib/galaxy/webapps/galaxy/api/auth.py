@@ -1,8 +1,12 @@
+<<<<<<< HEAD
 from collections.abc import Iterable
+=======
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
 from datetime import (
     datetime,
     timedelta,
 )
+<<<<<<< HEAD
 from typing import (
     Any,
     Optional,
@@ -27,6 +31,15 @@ from galaxy.security.validate_user_input import (
     validate_publicname,
 )
 from galaxy.web import url_for
+=======
+from typing import Optional
+
+from fastapi import Body
+
+from galaxy.exceptions import AuthenticationFailed
+from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
+from galaxy.managers.users import UserManager
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
 from galaxy.webapps.galaxy.api import (
     DependsOnTrans,
     Router,
@@ -139,6 +152,7 @@ def _serialize_user(trans: SessionRequestContext, user: Optional[User]) -> Optio
     }
 
 
+<<<<<<< HEAD
 def _success_payload(
     trans: SessionRequestContext,
     access_token: str,
@@ -147,16 +161,26 @@ def _success_payload(
     status: Optional[str] = None,
     redirect: Optional[str] = None,
 ) -> dict[str, Any]:
+=======
+def _success_payload(trans, access_token: str, *, message: str = "Success.", status: Optional[str] = None):
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     payload = _bootstrap_payload(trans, access_token=access_token)
     payload["message"] = message
     if status is not None:
         payload["status"] = status
+<<<<<<< HEAD
     if redirect is not None:
         payload["redirect"] = redirect
     return payload
 
 
 def _error_payload(message: str, *, status: Optional[str] = None, **kwd: Any) -> dict[str, Any]:
+=======
+    return payload
+
+
+def _error_payload(message: str, *, status: Optional[str] = None, **kwd):
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     payload = {"err_msg": message}
     if status is not None:
         payload["status"] = status
@@ -164,7 +188,11 @@ def _error_payload(message: str, *, status: Optional[str] = None, **kwd: Any) ->
     return payload
 
 
+<<<<<<< HEAD
 def _bootstrap_payload(trans: SessionRequestContext, access_token: Optional[str]) -> dict[str, Any]:
+=======
+def _bootstrap_payload(trans, access_token: Optional[str]):
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     history = trans.history
     return {
         "authenticated": trans.user is not None,
@@ -195,7 +223,11 @@ def _ensure_browser_auth_session(trans: SessionRequestContext) -> Optional[AuthS
     return auth_session
 
 
+<<<<<<< HEAD
 def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> None:
+=======
+def _promote_browser_login_state(trans, user) -> None:
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     trans.app.security_agent.create_user_role(user, trans.app)
     history = trans.history
     if history is not None:
@@ -212,6 +244,7 @@ def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> No
             if history not in trans.galaxy_session.histories:
                 trans.galaxy_session.add_history(history)
         trans.sa_session.add(trans.galaxy_session)
+<<<<<<< HEAD
     trans.set_user_context(user)
 
 
@@ -227,13 +260,29 @@ def _issue_browser_auth_for_user(
     current_auth_session = trans.auth_session
     if current_auth_session is not None:
         trans.app.auth_session_manager.invalidate_session(current_auth_session)
+=======
+    trans._WorkRequestContext__user = user
+    trans._actor_user = user
+
+
+def _issue_browser_auth_for_user(trans, user, *, message: str = "Success.", status: Optional[str] = None):
+    _promote_browser_login_state(trans, user)
+    if trans.auth_session is not None:
+        trans.app.auth_session_manager.invalidate_session(trans.auth_session)
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     auth_session = trans.app.auth_session_manager.create_session(
         user=user,
         auth_source="galaxy_token",
         current_history=trans.history,
+<<<<<<< HEAD
         remote_host=_request_remote_host(trans),
         remote_addr=_request_remote_addr(trans),
         referer=_request_headers(trans).get("Referer", None),
+=======
+        remote_host=trans.request.remote_host,
+        remote_addr=trans.request.remote_addr,
+        referer=trans.request.headers.get("Referer", None),
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     )
     refresh_token = trans.app.auth_session_manager.issue_refresh_token(auth_session)
     trans.sa_session.commit()
@@ -241,6 +290,7 @@ def _issue_browser_auth_for_user(
     trans._auth_source = "galaxy_token"
     _set_refresh_cookie(trans, refresh_token, auth_session.refresh_token_expires_at)
     access_token = trans.app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+<<<<<<< HEAD
     return _success_payload(trans, access_token, message=message, status=status, redirect=redirect)
 
 
@@ -342,6 +392,12 @@ def _auto_register_user(trans: SessionRequestContext, login: str, password: str)
 
 
 def _get_user_manager(trans: SessionRequestContext) -> UserManager:
+=======
+    return _success_payload(trans, access_token, message=message, status=status)
+
+
+def _get_user_manager(trans) -> UserManager:
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     return trans.app[UserManager]
 
 
@@ -357,21 +413,32 @@ def bootstrap(trans: SessionRequestContext = DependsOnTrans):
 
 
 @router.post("/auth/login", summary="Login and issue browser auth state")
+<<<<<<< HEAD
 def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans):
     payload = payload or {}
     login_identifier = payload.get("login")
     password = payload.get("password")
     redirect = payload.get("redirect")
+=======
+def login(payload: Optional[dict] = Body(default=None), trans=DependsOnTrans):
+    payload = payload or {}
+    login_identifier = payload.get("login")
+    password = payload.get("password")
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     if not login_identifier or not password:
         return _error_payload("Please specify a username and password.")
 
     user_manager = _get_user_manager(trans)
     user = user_manager.get_user_by_identity(login_identifier)
     if user is None:
+<<<<<<< HEAD
         user, message = _auto_register_user(trans, login_identifier, password)
         if message:
             return _error_payload(message)
         return _issue_browser_auth_for_user(trans, user, redirect=_safe_redirect(redirect))
+=======
+        return _error_payload("No such user or invalid password.")
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     if user.purged:
         return _error_payload("This account has been permanently deleted.")
     if user.deleted:
@@ -392,6 +459,7 @@ def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: Session
     if not trans.app.auth_manager.check_password(user, password, trans.request):
         return _error_payload("Invalid password.")
     if trans.app.config.user_activation_on and not user.active:
+<<<<<<< HEAD
         if trans.app.config.activation_grace_period != 0:
             if _is_outside_grace_period(trans, user.create_time):
                 return _error_payload(_resend_activation_email(trans, user.email, user.username))
@@ -399,6 +467,11 @@ def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: Session
             return _error_payload(_resend_activation_email(trans, user.email, user.username))
 
     pw_expires = trans.app.config.password_expiration_period
+=======
+        return _error_payload("This account has not been activated yet.")
+
+    pw_expires = getattr(trans.app.config, "password_expiration_period", None)
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     if pw_expires and user.last_password_change < datetime.today() - pw_expires:
         return {
             "message": "Your password has expired. Please reset or change it to access Galaxy.",
@@ -412,6 +485,7 @@ def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: Session
         expiredate = datetime.today() - user.last_password_change + pw_expires
         response_message = f"Your password will expire in {expiredate.days} day(s)."
         response_status = "warning"
+<<<<<<< HEAD
     return _issue_browser_auth_for_user(
         trans,
         user,
@@ -419,6 +493,9 @@ def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: Session
         status=response_status,
         redirect=_safe_redirect(redirect),
     )
+=======
+    return _issue_browser_auth_for_user(trans, user, message=response_message, status=response_status)
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
 
 
 @router.post("/auth/refresh", summary="Refresh browser access token")
@@ -435,7 +512,11 @@ def refresh(trans: SessionRequestContext = DependsOnTrans):
 
 
 @router.post("/auth/register", summary="Register and issue browser auth state")
+<<<<<<< HEAD
 def register(payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans):
+=======
+def register(payload: Optional[dict] = Body(default=None), trans=DependsOnTrans):
+>>>>>>> a577d90995 (Add auth login and registration endpoints)
     payload = payload or {}
     user_manager = _get_user_manager(trans)
     user, message = user_manager.register(

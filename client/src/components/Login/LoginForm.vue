@@ -87,12 +87,16 @@ async function submitLogin() {
     }
 
     try {
-        const response = await axios.post(withPrefix("/user/login"), {
+        const response = await axios.post(withPrefix("/auth/login"), {
             login: login.value,
             password: password.value,
             redirect: redirect,
             session_csrf_token: props.sessionCsrfToken,
         });
+
+        if (response.data?.err_msg) {
+            throw new Error(response.data.err_msg);
+        }
 
         if (response.data.message && response.data.status) {
             alert(response.data.message);
