@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 
 class StubGalaxyWebTransaction(GalaxyWebTransaction):
-    def _ensure_valid_session(self, session_cookie: str, create: bool = True) -> None:
+    def _ensure_valid_session(self, create: bool = True) -> None:
         pass
 
 
@@ -42,7 +42,7 @@ class TestGalaxyWebTransactionHeaders:
         app.config = CORSParsingMockConfig(allowed_origin_hostnames=allowed_origin_hostnames)
         webapp = cast(WebApplication, galaxy_mock.MockWebapp(app.security))
         environ = galaxy_mock.buildMockEnviron()
-        trans = StubGalaxyWebTransaction(environ, app, webapp, "session_cookie")
+        trans = StubGalaxyWebTransaction(environ, app, webapp)
         return trans
 
     def assert_cors_header_equals(self, headers, should_be):

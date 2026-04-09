@@ -108,13 +108,11 @@ class WebApplication(base.WebApplication):
 
     injection_aware: bool = False
 
-    def __init__(
-        self, galaxy_app: MinimalApp, session_cookie: str = "galaxysession", name: Optional[str] = None
-    ) -> None:
+    def __init__(self, galaxy_app: MinimalApp, name: Optional[str] = None) -> None:
         super().__init__()
         self.name = name
         galaxy_app.is_webapp = True
-        self.set_transaction_factory(lambda e: self.transaction_chooser(e, galaxy_app, session_cookie))
+        self.set_transaction_factory(lambda e: self.transaction_chooser(e, galaxy_app))
         # Mako support
         self.mako_template_lookup = self.create_mako_template_lookup(galaxy_app, name)
         # Security helper
@@ -224,8 +222,8 @@ class WebApplication(base.WebApplication):
     def make_body_iterable(self, trans, body):
         return base.WebApplication.make_body_iterable(self, trans, body)
 
-    def transaction_chooser(self, environ, galaxy_app: BasicSharedApp, session_cookie: str):
-        return GalaxyWebTransaction(environ, galaxy_app, self, session_cookie)
+    def transaction_chooser(self, environ, galaxy_app: BasicSharedApp):
+        return GalaxyWebTransaction(environ, galaxy_app, self)
 
     def add_ui_controllers(self, package_name, app):
         """
@@ -315,9 +313,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
     (specifically the user's "cookie" session and history)
     """
 
-    def __init__(
-        self, environ: dict[str, Any], app: BasicSharedApp, webapp: WebApplication, session_cookie: Optional[str] = None
-    ) -> None:
+    def __init__(self, environ: dict[str, Any], app: BasicSharedApp, webapp: WebApplication) -> None:
         self._app = app
         self.webapp = webapp
         self.user_manager = app[UserManager]
@@ -335,7 +331,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.__user = None
         self._actor_user = None
         self.auth_session = None
-        self.galaxy_session = None
         self.error_message = None
         self.host = self.request.host
         self._short_term_cache: dict[tuple[str, ...], Any] = {}
@@ -349,8 +344,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             # If not, check for an active session but do not create one.
             # If an error message is set here, it's sent back using
             # trans.show_error in the response -- in expose_api.
-            assert session_cookie
-            self.error_message = self._authenticate_api(session_cookie)
+            self.error_message = self._authenticate_api()
         elif self.app.name == "reports":
             self.auth_session = None
         else:
@@ -382,7 +376,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                         self.response.status = 401
                         self.user = None
                         self.auth_session = None
-                        self.galaxy_session = None
                     else:
                         self.response.send_redirect(
                             url_for(
@@ -397,8 +390,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                     self.sa_session.commit()
         elif not self.environ.get("is_api_request", False):
             self._ensure_browser_auth_session()
-
-        self.galaxy_session = self.auth_session
 
     @property
     def app(self):
@@ -487,13 +478,21 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
 
     actor_user = property(get_actor_user, set_actor_user)
 
+    @property
+    def galaxy_session(self) -> Optional[AuthSession]:
+        return self.auth_session
+
+    @galaxy_session.setter
+    def galaxy_session(self, auth_session: Optional[AuthSession]) -> None:
+        self.auth_session = auth_session
+
     def set_user_context(self, user, actor_user=None):
         """Set the effective and actor users together."""
         self.set_user(user)
         if actor_user is not None:
             self._actor_user = actor_user
 
-    def get_cookie(self, name="galaxysession"):
+    def get_cookie(self, name: str):
         """Convenience method for getting a session cookie"""
         try:
             # If we've changed the cookie during the request return the new value
@@ -503,7 +502,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         except Exception:
             return None
 
-    def set_cookie(self, value, name="galaxysession", path="/", age=90, version="1"):
+    def set_cookie(self, value, name: str, path="/", age=90, version="1"):
         self._set_cookie(value, name=name, path=path, age=age, version=version)
 
     def set_auth_cookie(self, refresh_token: str, expires_at: Optional[datetime.datetime]) -> None:
@@ -525,10 +524,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
     def clear_auth_cookie(self) -> None:
         self.set_auth_cookie("", datetime.datetime.utcnow())
 
-    def _set_cookie(self, value, name="galaxysession", path="/", age=90, version="1", encode_value=False):
+    def _set_cookie(self, value, name: str, path="/", age=90, version="1", encode_value=False):
         """Convenience method for setting a session cookie"""
-        # The galaxysession cookie value must be a high entropy 128 bit random number encrypted
-        # using a server secret key.  Any other value is invalid and could pose security issues.
         if encode_value:
             value = self.security.encode_guid(value)
         self.response.cookies[name] = unicodify(value)
@@ -547,7 +544,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         if self.app.config.cookie_domain is not None:
             self.response.cookies[name]["domain"] = self.app.config.cookie_domain
 
-    def _authenticate_api(self, session_cookie: str) -> Optional[str]:
+    def _authenticate_api(self) -> Optional[str]:
         """
         Authenticate for the API via key or session (if available).
         """
@@ -602,9 +599,8 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             refresh_token = self.auth_session_manager.issue_refresh_token(self.auth_session)
             self.sa_session.commit()
             self.set_auth_cookie(refresh_token, self.auth_session.refresh_token_expires_at)
-        self.galaxy_session = self.auth_session
 
-    def _ensure_valid_session(self, session_cookie: str, create: bool = True) -> None:
+    def _ensure_valid_session(self, create: bool = True) -> None:
         """Deprecated legacy session loader retained for compatibility during migration."""
         self._ensure_browser_auth_session()
 
@@ -671,10 +667,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         # Cookies for non-root paths should not end with `/` -> https://stackoverflow.com/questions/36131023/setting-a-slash-on-cookie-path
         return (self.app.config.cookie_path or url_for("/")).rstrip("/") or "/"
 
-    def __update_session_cookie(self, name="galaxysession"):
-        """Deprecated legacy helper."""
-        return None
-
     def check_user_library_import_dir(self, user: User) -> None:
         if self.app.config.get("user_library_import_dir_auto_creation", False):
             # try to create a user library import directory
@@ -706,7 +698,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.user_checks(user)
         self.app.security_agent.create_user_role(user, self.app)
         self.issue_auth_session(user=user, auth_source="galaxy_token")
-        self.galaxy_session = self.auth_session
         if self.webapp.name == "galaxy":
             self.get_or_create_default_history()
 
@@ -734,7 +725,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             refresh_token = self.auth_session_manager.issue_refresh_token(self.auth_session)
             self.sa_session.commit()
             self.set_auth_cookie(refresh_token, self.auth_session.refresh_token_expires_at)
-        self.galaxy_session = self.auth_session
 
     def get_galaxy_session(self) -> Optional[AuthSession]:
         """
@@ -763,7 +753,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         refresh_token = self.auth_session_manager.issue_refresh_token(auth_session)
         self.sa_session.commit()
         self.auth_session = auth_session
-        self.galaxy_session = self.auth_session
         self.set_auth_cookie(refresh_token, auth_session.refresh_token_expires_at)
         return auth_session
 
@@ -779,7 +768,6 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                 )
             self.sa_session.commit()
         self.auth_session = None
-        self.galaxy_session = None
         self.clear_auth_cookie()
 
     def get_history(self, create=False, most_recent=False):
@@ -989,10 +977,10 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         return url_for(path, qualified=True)
 
 
-def create_new_session(trans, prev_galaxy_session=None, user_for_new_session=None):
+def create_new_session(trans, prev_auth_session=None, user_for_new_session=None):
     """
     Create a new AuthSession for this request, possibly with a connection
-    to a previous session (in `prev_galaxy_session`) and an existing user
+    to a previous session (in `prev_auth_session`) and an existing user
     (in `user_for_new_session`).
 
     Caller is responsible for flushing the returned session.

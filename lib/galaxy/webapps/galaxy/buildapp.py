@@ -34,10 +34,8 @@ log = logging.getLogger(__name__)
 class GalaxyWebApplication(galaxy.webapps.base.webapp.WebApplication):
     injection_aware = True
 
-    def __init__(
-        self, galaxy_app: MinimalApp, session_cookie: str = "galaxysession", name: Optional[str] = None
-    ) -> None:
-        super().__init__(galaxy_app, session_cookie, name)
+    def __init__(self, galaxy_app: MinimalApp, name: Optional[str] = None) -> None:
+        super().__init__(galaxy_app, name)
         self.session_factories.append(galaxy_app.install_model)
 
 
@@ -75,7 +73,7 @@ def app_pair(global_conf, load_app_kwds=None, wsgi_preflight=True, **kwargs):
         app.application_stack.register_postfork_function(atexit.register, app.shutdown)
 
     # Create the universe WSGI application
-    webapp = GalaxyWebApplication(app, session_cookie="galaxysession", name="galaxy")
+    webapp = GalaxyWebApplication(app, name="galaxy")
 
     # STANDARD CONTROLLER ROUTES
     webapp.add_ui_controllers("galaxy.webapps.galaxy.controllers", app)

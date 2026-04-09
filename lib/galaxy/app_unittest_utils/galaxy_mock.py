@@ -340,7 +340,6 @@ class MockTrans:
         self.url_builder = mock_url_builder
 
         self.auth_session = None
-        self.galaxy_session = None
         self.__user = user
         self._actor_user = user
         self._auth_source = "anonymous"
@@ -417,23 +416,24 @@ class MockTrans:
         if actor_user is not None:
             self._actor_user = actor_user
 
+    @property
+    def galaxy_session(self):
+        return self.auth_session
+
+    @galaxy_session.setter
+    def galaxy_session(self, auth_session) -> None:
+        self.auth_session = auth_session
+
     def get_user(self) -> Optional[User]:
         if self.auth_session:
             return self.auth_session.user
-        if self.galaxy_session:
-            return self.galaxy_session.user
-        else:
-            return self.__user
+        return self.__user
 
     def set_user(self, user: Optional[User]) -> None:
         """Set the current user."""
         if self.auth_session:
             self.auth_session.user = user
             self.sa_session.add(self.auth_session)
-            self.sa_session.commit()
-        if self.galaxy_session:
-            self.galaxy_session.user = user
-            self.sa_session.add(self.galaxy_session)
             self.sa_session.commit()
         self.__user = user
         if self._actor_user is None or user is None:
