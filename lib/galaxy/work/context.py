@@ -58,6 +58,7 @@ class WorkRequestContext(ProvidesHistoryContext):
         self.auth_session = auth_session
         self.galaxy_session = galaxy_session
         self._auth_source = auth_source
+
     def set_user_context(self, user: Optional["User"], actor_user: Optional["User"] = None) -> None:
         self.__user = user
         self._actor_user = actor_user if actor_user is not None else user
