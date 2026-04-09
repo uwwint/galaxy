@@ -215,7 +215,7 @@ def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> No
     trans.set_user_context(user)
 
 
-def _issue_browser_auth_for_user(
+def issue_browser_auth_for_user(
     trans: SessionRequestContext,
     user: User,
     *,
@@ -371,7 +371,7 @@ def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: Session
         user, message = _auto_register_user(trans, login_identifier, password)
         if message:
             return _error_payload(message)
-        return _issue_browser_auth_for_user(trans, user, redirect=_safe_redirect(redirect))
+        return issue_browser_auth_for_user(trans, user, redirect=_safe_redirect(redirect))
     if user.purged:
         return _error_payload("This account has been permanently deleted.")
     if user.deleted:
@@ -412,7 +412,7 @@ def login(payload: Optional[dict[str, Any]] = Body(default=None), trans: Session
         expiredate = datetime.today() - user.last_password_change + pw_expires
         response_message = f"Your password will expire in {expiredate.days} day(s)."
         response_status = "warning"
-    return _issue_browser_auth_for_user(
+    return issue_browser_auth_for_user(
         trans,
         user,
         message=response_message,
@@ -450,7 +450,7 @@ def register(payload: Optional[dict[str, Any]] = Body(default=None), trans: Sess
         return _error_payload(message)
     if user is None:
         return _error_payload("User registration failed.")
-    return _issue_browser_auth_for_user(trans, user)
+    return issue_browser_auth_for_user(trans, user)
 
 
 @router.post("/auth/change_password", summary="Change the current user's password")
@@ -460,7 +460,7 @@ def change_password(payload: Optional[dict[str, Any]] = Body(default=None), tran
     if user is None:
         return _error_payload(message)
     if trans.auth_session is None or payload.get("token"):
-        return _issue_browser_auth_for_user(trans, user, message=message)
+        return issue_browser_auth_for_user(trans, user, message=message)
     return {"message": message}
 
 

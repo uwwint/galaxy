@@ -105,6 +105,7 @@ import WorkflowImport from "@/components/Workflow/WorkflowImport.vue";
 import WorkflowInvocationState from "@/components/WorkflowInvocationState/WorkflowInvocationState.vue";
 import Analysis from "@/entry/analysis/modules/Analysis.vue";
 import Home from "@/entry/analysis/modules/Home.vue";
+import LoginCallback from "@/entry/analysis/modules/LoginCallback.vue";
 import Login from "@/entry/analysis/modules/Login.vue";
 import Register from "@/entry/analysis/modules/Register.vue";
 import WorkflowEditorModule from "@/entry/analysis/modules/WorkflowEditor.vue";
@@ -162,6 +163,10 @@ export function getRouter(Galaxy) {
         mode: "history",
         routes: [
             /** Login entry route */
+            {
+                path: "/login/callback",
+                component: LoginCallback,
+            },
             {
                 path: "/login/start",
                 component: Login,

@@ -5,6 +5,7 @@ OAuth 2.0 and OpenID Connect Authentication and Authorization Controller.
 import datetime
 import json
 import logging
+from urllib.parse import quote
 from typing import TYPE_CHECKING
 
 import jwt
@@ -16,6 +17,7 @@ from galaxy import (
 from galaxy.util import url_get
 from galaxy.web import url_for
 from galaxy.webapps.base.controller import BaseUIController
+from ..api import auth as auth_api
 
 if TYPE_CHECKING:
     from galaxy.webapps.base.webapp import GalaxyWebTransaction
@@ -161,12 +163,13 @@ class OIDC(BaseUIController):
                 "identity provider. Please try again, and if the problem persists, "
                 "contact the Galaxy instance admin."
             )
-        trans.handle_user_login(user)
+        auth_api.issue_browser_auth_for_user(trans, user)
         # Record which idp provider was logged into, so we can logout of it later
         trans.set_cookie(value=provider, name=PROVIDER_COOKIE_NAME)
         # Clear the login next cookie back to default.
         trans.set_cookie(value="/", name=LOGIN_NEXT_COOKIE_NAME)
-        return trans.response.send_redirect(url_for(redirect_url))
+        callback_url = trans.url_builder("/login/callback", redirect=quote(redirect_url, safe=""))
+        return trans.response.send_redirect(callback_url)
 
     @web.expose
     def create_user(self, trans: "GalaxyWebTransaction", provider: str, **kwargs):
@@ -188,12 +191,13 @@ class OIDC(BaseUIController):
                 "identity provider. Please try again, and if the problem persists, "
                 "contact the Galaxy instance admin."
             )
-        trans.handle_user_login(user)
+        auth_api.issue_browser_auth_for_user(trans, user)
         # Record which idp provider was logged into, so we can logout of it later
         trans.set_cookie(value=provider, name=PROVIDER_COOKIE_NAME)
         if redirect_url is None:
             redirect_url = url_for("/")
-        return trans.response.send_redirect(url_for(redirect_url))
+        callback_url = trans.url_builder("/login/callback", redirect=quote(redirect_url, safe=""))
+        return trans.response.send_redirect(callback_url)
 
     @web.expose
     @web.require_login("authenticate against the selected identity provider")
