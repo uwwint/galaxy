@@ -18,7 +18,10 @@ from galaxy.exceptions import (
 )
 from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
 from galaxy.managers.users import UserManager
-from galaxy.model import AuthSession, User
+from galaxy.model import (
+    AuthSession,
+    User,
+)
 from galaxy.security.validate_user_input import (
     validate_email,
     validate_publicname,
@@ -46,59 +49,21 @@ def _request_headers(trans: SessionRequestContext) -> Any:
 
 
 def _request_remote_host(trans: SessionRequestContext) -> Optional[str]:
-    if hasattr(trans.request, "get"):
-        remote_host = trans.request.get("remote_host", None) or trans.request.get("REMOTE_HOST", None)
-        if remote_host:
-            return remote_host
-        remote_addr = trans.request.get("remote_addr", None) or trans.request.get("REMOTE_ADDR", None)
-        if remote_addr:
-            return remote_addr
-    request_environ = getattr(trans.request, "environ", None)
-    if request_environ is not None:
-        remote_host = request_environ.get("REMOTE_HOST")
-        if remote_host:
-            return remote_host
-        remote_addr = request_environ.get("REMOTE_ADDR")
-        if remote_addr:
-            return remote_addr
-    try:
-        return trans.request.remote_host
-    except AttributeError:
-        return None
+    return trans.request.remote_host
 
 
 def _request_remote_addr(trans: SessionRequestContext) -> Optional[str]:
-    if hasattr(trans.request, "get"):
-        remote_addr = trans.request.get("remote_addr", None) or trans.request.get("REMOTE_ADDR", None)
-        if remote_addr:
-            return remote_addr
-    request_environ = getattr(trans.request, "environ", None)
-    if request_environ is not None:
-        remote_addr = request_environ.get("REMOTE_ADDR")
-        if remote_addr:
-            return remote_addr
-    try:
-        return trans.request.remote_addr
-    except AttributeError:
-        return None
+    return trans.request.remote_addr
 
 
 def _request_is_secure(trans: SessionRequestContext) -> bool:
-    if hasattr(trans.request, "is_secure"):
-        return bool(trans.request.is_secure)
-    request_environ = getattr(trans.request, "environ", None)
-    if request_environ is not None:
-        return request_environ.get("wsgi.url_scheme") == "https"
-    return False
+    return bool(trans.request.is_secure)
 
 
 def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expires_at: Optional[datetime]) -> None:
     max_age = 0
     if expires_at is not None:
         max_age = max(0, int((expires_at - datetime.utcnow()).total_seconds()))
-    if hasattr(trans, "set_auth_cookie"):
-        trans.set_auth_cookie(refresh_token, expires_at)
-        return
     trans.response.set_cookie(
         key=AUTH_SESSION_COOKIE_NAME,
         value=refresh_token,
@@ -112,9 +77,6 @@ def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expire
 
 
 def _clear_refresh_cookie(trans: SessionRequestContext) -> None:
-    if hasattr(trans, "clear_auth_cookie"):
-        trans.clear_auth_cookie()
-        return
     trans.response.set_cookie(
         key=AUTH_SESSION_COOKIE_NAME,
         value="",
@@ -164,14 +126,10 @@ def _error_payload(message: str, *, status: Optional[str] = None, **kwd: Any) ->
 
 def _bootstrap_payload(trans: SessionRequestContext, access_token: Optional[str]) -> dict[str, Any]:
     history = trans.history
-    try:
-        auth_source = trans.auth_source
-    except AttributeError:
-        auth_source = trans.__dict__.get("_auth_source", "unknown")
     return {
         "authenticated": trans.user is not None,
         "access_token": access_token,
-        "auth_source": auth_source,
+        "auth_source": trans.auth_source,
         "user": _serialize_user(trans, trans.user),
         "actor_user": _serialize_user(trans, trans.actor_user),
         "current_history_id": trans.security.encode_id(history.id) if history else None,
@@ -207,10 +165,7 @@ def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> No
                 history, dataset=True, bypass_manage_permission=True
             )
         trans.sa_session.add(history)
-    try:
-        trans.set_user_context(user)
-    except AttributeError:
-        trans.set_user(user)
+    trans.set_user_context(user)
 
 
 def issue_browser_auth_for_user(
@@ -254,7 +209,7 @@ def _resend_activation_email(trans: SessionRequestContext, email: str, username:
     if is_activation_sent:
         message = (
             f"This account has not been activated yet. The activation link has been sent again. "
-            f'Please check your email address <b>{escape(email)}</b> including the spam/trash folder. '
+            f"Please check your email address <b>{escape(email)}</b> including the spam/trash folder. "
             f'<a target="_top" href="{url_for("/")}">Return to the home page</a>.'
         )
     else:
@@ -301,7 +256,9 @@ def _handle_role_and_group_auto_creation(
                     create_group_for_role=auto_create_groups,
                 )
         if auto_create_groups:
-            group = trans.sa_session.query(trans.app.model.Group).filter(trans.app.model.Group.name == role_name).first()
+            group = (
+                trans.sa_session.query(trans.app.model.Group).filter(trans.app.model.Group.name == role_name).first()
+            )
             if group is None:
                 group = trans.app.model.Group(name=role_name)
                 trans.sa_session.add(group)
@@ -312,7 +269,9 @@ def _handle_role_and_group_auto_creation(
             trans.app.security_agent.associate_user_role(user, role)
 
 
-def _auto_register_user(trans: SessionRequestContext, login: str, password: str) -> tuple[Optional[User], Optional[str]]:
+def _auto_register_user(
+    trans: SessionRequestContext, login: str, password: str
+) -> tuple[Optional[User], Optional[str]]:
     try:
         autoreg = trans.app.auth_manager.check_auto_registration(trans, login, password)
     except Conflict as conflict:
@@ -452,7 +411,9 @@ def register(payload: Optional[dict[str, Any]] = Body(default=None), trans: Sess
 
 
 @router.post("/auth/change_password", summary="Change the current user's password")
-def change_password(payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans):
+def change_password(
+    payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans
+):
     payload = payload or {}
     user, message = _get_user_manager(trans).change_password(trans, **payload)
     if user is None:
@@ -463,7 +424,9 @@ def change_password(payload: Optional[dict[str, Any]] = Body(default=None), tran
 
 
 @router.post("/auth/reset_password", summary="Request a password reset email")
-def reset_password(payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans):
+def reset_password(
+    payload: Optional[dict[str, Any]] = Body(default=None), trans: SessionRequestContext = DependsOnTrans
+):
     payload = payload or {}
     message = _get_user_manager(trans).send_reset_email(trans, payload)
     if message:

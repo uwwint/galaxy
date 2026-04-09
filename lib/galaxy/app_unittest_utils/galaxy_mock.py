@@ -160,6 +160,7 @@ class MockApp(di.Container, GalaxyDataTestApp):
         self.job_manager = NoopManager()
         self.application_stack = ApplicationStack()
         self.auth_manager = AuthManager(self.config)
+        self.authnz_manager = None
         self.user_manager = UserManager(cast(BasicSharedApp, self))
         self.auth_session_manager = AuthSessionManager(cast(BasicSharedApp, self))
         self[AuthSessionManager] = self.auth_session_manager
@@ -342,6 +343,7 @@ class MockTrans:
         self.galaxy_session = None
         self.__user = user
         self._actor_user = user
+        self._auth_source = "anonymous"
         self.security = self.app.security
         self.history = history
 
@@ -352,22 +354,27 @@ class MockTrans:
             host_url="request.host_url",
             remote_host="request.remote_host",
             remote_addr="request.remote_addr",
-            environ={"wsgi.url_scheme": "http", "REMOTE_HOST": "request.remote_host", "REMOTE_ADDR": "request.remote_addr"},
+            is_secure=False,
+            environ={
+                "wsgi.url_scheme": "http",
+                "REMOTE_HOST": "request.remote_host",
+                "REMOTE_ADDR": "request.remote_addr",
+            },
             url_path="mock/url/path",
         )
         response_cookies = SimpleCookie()
 
         def set_cookie(
-            key,
-            value="",
-            max_age=None,
-            expires=None,
-            path="/",
-            domain=None,
-            secure=False,
-            httponly=False,
-            samesite="lax",
-        ):
+            key: str,
+            value: str = "",
+            max_age: Optional[int] = None,
+            expires: Optional[str] = None,
+            path: str = "/",
+            domain: Optional[str] = None,
+            secure: bool = False,
+            httponly: bool = False,
+            samesite: Optional[str] = "lax",
+        ) -> None:
             response_cookies[key] = value
             morsel = response_cookies[key]
             if max_age is not None:
@@ -384,22 +391,33 @@ class MockTrans:
             if samesite is not None:
                 morsel["samesite"] = samesite
 
-        self.response: Any = Bunch(headers={}, status="200 OK", cookies=response_cookies, set_content_type=lambda i: None, set_cookie=set_cookie)
+        self.response: Any = Bunch(
+            headers={},
+            status="200 OK",
+            cookies=response_cookies,
+            set_content_type=lambda i: None,
+            set_cookie=set_cookie,
+        )
 
     @property
     def tag_handler(self):
         return self.app.tag_handler
 
-    def check_csrf_token(self, payload):
+    def check_csrf_token(self, payload: Any) -> None:
         pass
 
-    def handle_user_login(self, user):
+    def handle_user_login(self, user: User) -> None:
         pass
 
-    def log_event(self, message):
+    def log_event(self, message: str) -> None:
         pass
 
-    def get_user(self):
+    def set_user_context(self, user: Optional[User], actor_user: Optional[User] = None) -> None:
+        self.set_user(user)
+        if actor_user is not None:
+            self._actor_user = actor_user
+
+    def get_user(self) -> Optional[User]:
         if self.auth_session:
             return self.auth_session.user
         if self.galaxy_session:
@@ -407,7 +425,7 @@ class MockTrans:
         else:
             return self.__user
 
-    def set_user(self, user):
+    def set_user(self, user: Optional[User]) -> None:
         """Set the current user."""
         if self.auth_session:
             self.auth_session.user = user
@@ -423,24 +441,34 @@ class MockTrans:
 
     user = property(get_user, set_user)
 
-    def get_actor_user(self):
+    def get_actor_user(self) -> Optional[User]:
         return self._actor_user or self.get_user()
 
-    def set_actor_user(self, user):
+    def set_actor_user(self, user: Optional[User]) -> None:
         self._actor_user = user
 
     actor_user = property(get_actor_user, set_actor_user)
 
-    def get_history(self, **kwargs):
+    def get_history(self, **kwargs) -> Any:
         return self.history
 
-    def set_history(self, history):
+    def set_history(self, history: Any) -> None:
         if self.auth_session:
             self.auth_session.current_history = history
             self.sa_session.add(self.auth_session)
         self.history = history
 
-    def fill_template(self, filename, template_lookup=None, **kwargs):
+    @property
+    def auth_source(self) -> str:
+        if self.auth_session is not None:
+            return self.auth_session.auth_source
+        return self._auth_source
+
+    @auth_source.setter
+    def auth_source(self, value: str) -> None:
+        self._auth_source = value
+
+    def fill_template(self, filename: str, template_lookup=None, **kwargs) -> str:
         if template_lookup is None:
             template_path = os.path.join(glx_dir, "templates")
             template_lookup = mako.lookup.TemplateLookup(directories=template_path)

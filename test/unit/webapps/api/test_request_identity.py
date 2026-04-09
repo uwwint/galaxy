@@ -7,10 +7,10 @@ from galaxy.managers.context import RequestIdentity
 from galaxy.managers.users import UserManager
 from galaxy.webapps.galaxy.api import (
     get_actor_user,
+    get_api_user,
     get_auth_session_from_bearer_token,
     get_auth_source,
     get_effective_api_user,
-    get_api_user,
 )
 from galaxy.work.context import WorkRequestContext
 

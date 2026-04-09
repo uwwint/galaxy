@@ -5,8 +5,8 @@ OAuth 2.0 and OpenID Connect Authentication and Authorization Controller.
 import datetime
 import json
 import logging
-from urllib.parse import quote
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 import jwt
 

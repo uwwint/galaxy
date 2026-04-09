@@ -33,8 +33,10 @@ from galaxy.webapps.base.controller import (
     BaseUIController,
     UsesFormDefinitionsMixin,
 )
-from ..api import auth as auth_api
-from ..api import depends
+from ..api import (
+    auth as auth_api,
+    depends,
+)
 
 log = logging.getLogger(__name__)
 

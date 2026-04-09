@@ -1,4 +1,7 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import (
+    MagicMock,
+    patch,
+)
 
 from galaxy.app_unittest_utils import galaxy_mock
 from galaxy.managers.users import UserManager

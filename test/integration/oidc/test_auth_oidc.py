@@ -372,9 +372,7 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
 
         # Should now automatically associate account
         parsed_url = parse.urlparse(response.url)
-        notification = parse.unquote(
-            parse.unquote(parse.parse_qs(parsed_url.query)["redirect"][0])
-        )
+        notification = parse.unquote(parse.unquote(parse.parse_qs(parsed_url.query)["redirect"][0]))
         assert "Your Keycloak identity has been linked to your Galaxy account." in notification
         response = session.get(self._api_url("users/current"))
         self._assert_status_code_is(response, 200)
@@ -837,7 +835,9 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
 
         # Establish a web session and log in as User A
         session = requests.Session()
-        response = session.post(self._api_url("../auth/login"), json={"login": "user_a@galaxy.org", "password": "test123"})
+        response = session.post(
+            self._api_url("../auth/login"), json={"login": "user_a@galaxy.org", "password": "test123"}
+        )
         self._assert_status_code_is(response, 200)
         assert response.json()["message"] == "Success."
 

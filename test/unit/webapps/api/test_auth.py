@@ -12,9 +12,9 @@ from galaxy.webapps.galaxy.api.auth import (
     change_password,
     login,
     logout,
-    reset_password,
-    register,
     refresh,
+    register,
+    reset_password,
 )
 from galaxy.work.context import (
     GalaxyAbstractRequest,

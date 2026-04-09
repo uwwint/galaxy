@@ -33,7 +33,11 @@ from galaxy.exceptions import (
 from galaxy.managers import context
 from galaxy.managers.auth_sessions import AUTH_SESSION_COOKIE_NAME
 from galaxy.managers.users import UserManager
-from galaxy.model import History
+from galaxy.model import (
+    AuthSession,
+    History,
+    User,
+)
 from galaxy.model.base import ensure_object_added_to_session
 from galaxy.structured_app import (
     BasicSharedApp,
@@ -317,11 +321,11 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self._app = app
         self.webapp = webapp
         self.user_manager = app[UserManager]
-        self.auth_session_manager = getattr(app, "auth_session_manager", None)
+        self.auth_session_manager = app.auth_session_manager
         super().__init__(environ)
         config = self.app.config
         self.debug = asbool(config.get("debug", False))
-        if x_frame_options := getattr(config, "x_frame_options", None):
+        if x_frame_options := config.get("x_frame_options", None):
             if not _is_embed_request(self.request.path_info, self.environ.get("QUERY_STRING", "")):
                 self.response.headers["X-Frame-Options"] = x_frame_options
         # Flag indicating whether we are in workflow building mode (means
@@ -352,7 +356,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         else:
             self._ensure_browser_auth_session()
 
-        if hasattr(self.app, "authnz_manager") and self.app.authnz_manager:
+        if self.app.authnz_manager:
             self.app.authnz_manager.refresh_expiring_oidc_tokens(self)
 
         if self.auth_session:
@@ -671,25 +675,25 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         """Deprecated legacy helper."""
         return None
 
-    def check_user_library_import_dir(self, user):
-        if getattr(self.app.config, "user_library_import_dir_auto_creation", False):
+    def check_user_library_import_dir(self, user: User) -> None:
+        if self.app.config.get("user_library_import_dir_auto_creation", False):
             # try to create a user library import directory
             try:
                 safe_makedirs(os.path.join(self.app.config.user_library_import_dir, user.email))
             except ConfigurationError as e:
                 self.log_event(unicodify(e))
 
-    def user_checks(self, user):
+    def user_checks(self, user: User) -> None:
         """
         This could contain more checks around a user upon login
         """
         self.check_user_library_import_dir(user)
 
-    def _associate_user_history(self, user, prev_galaxy_session=None):
+    def _associate_user_history(self, user: User, prev_galaxy_session=None) -> None:
         """Deprecated legacy helper."""
         return None
 
-    def handle_user_login(self, user):
+    def handle_user_login(self, user: User) -> None:
         """
         Login a new user (possibly newly created)
            - do some 'system' checks (if any) for this user
@@ -706,7 +710,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         if self.webapp.name == "galaxy":
             self.get_or_create_default_history()
 
-    def handle_user_logout(self, logout_all=False):
+    def handle_user_logout(self, logout_all: bool = False) -> None:
         """
         Logout the current user:
            - invalidate the current session
@@ -732,13 +736,17 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.set_auth_cookie(refresh_token, self.auth_session.refresh_token_expires_at)
         self.galaxy_session = self.auth_session
 
-    def get_galaxy_session(self):
+    def get_galaxy_session(self) -> Optional[AuthSession]:
         """
         Return the current galaxy session
         """
         return self.auth_session
 
-    def issue_auth_session(self, user=None, auth_source="galaxy_token"):
+    def issue_auth_session(
+        self,
+        user: Optional[User] = None,
+        auth_source: str = "galaxy_token",
+    ) -> Optional[AuthSession]:
         if self.auth_session_manager is None:
             return None
         if self.auth_session is not None:
@@ -759,7 +767,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.set_auth_cookie(refresh_token, auth_session.refresh_token_expires_at)
         return auth_session
 
-    def invalidate_auth_session(self, logout_all=False):
+    def invalidate_auth_session(self, logout_all: bool = False) -> None:
         if self.auth_session_manager is None:
             return
         current_auth_session = self.auth_session
@@ -785,7 +793,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         None is a valid response.
         """
         history = None
-        if self.auth_session and hasattr(self.auth_session, "current_history"):
+        if self.auth_session and self.auth_session.current_history:
             history = self.auth_session.current_history
         if not history and most_recent:
             history = self.get_most_recent_history()
@@ -793,7 +801,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             history = self.get_or_create_default_history()
         return history
 
-    def set_history(self, history):
+    def set_history(self, history: Optional[History]) -> None:
         if history and not history.deleted and self.auth_session:
             self.auth_session.current_history = history
             self.sa_session.add(self.auth_session)
@@ -850,7 +858,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         self.set_history(recent_history)
         return recent_history
 
-    def new_history(self, name=None):
+    def new_history(self, name: Optional[str] = None) -> History:
         """
         Create a new history and associate it with the current session and
         its associated user (if set).

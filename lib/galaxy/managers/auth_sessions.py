@@ -1,5 +1,5 @@
-import logging
 import hashlib
+import logging
 import secrets
 from collections.abc import Iterable
 from datetime import (
@@ -17,9 +17,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import joinedload
 
 from galaxy import exceptions
-from galaxy.model import AuthSession
-from galaxy.model import History
-from galaxy.model import User
+from galaxy.model import (
+    AuthSession,
+    History,
+    User,
+)
 from galaxy.structured_app import MinimalManagerApp
 
 DEFAULT_ACCESS_TOKEN_LIFETIME = timedelta(minutes=20)
