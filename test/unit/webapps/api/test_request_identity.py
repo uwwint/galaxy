@@ -107,7 +107,7 @@ def test_invalid_galaxy_bearer_token_does_not_fall_through_to_external_oidc():
     user = user_manager.create(email="user1@example.org", username="user1", password="password")
     auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
     access_token = app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
-    invalid_access_token = access_token[:-1] + ("A" if access_token[-1] != "A" else "B")
+    invalid_access_token = f"{access_token.rsplit('.', 1)[0]}.invalidsignature"
 
     with pytest.raises(exceptions.AuthenticationFailed):
         get_auth_session_from_bearer_token(

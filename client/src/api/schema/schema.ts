@@ -9081,8 +9081,6 @@ export interface components {
             config: {
                 [key: string]: unknown;
             };
-            /** Session Csrf Token */
-            session_csrf_token?: string | null;
             /** User */
             user: {
                 [key: string]: unknown;

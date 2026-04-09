@@ -107,7 +107,6 @@ class AbstractTestCases:
         # regex to find the action attribute on the HTML login page
         #   returned by Keycloak
         REGEX_KEYCLOAK_LOGIN_ACTION = re.compile(r"action=\"(.*?)\"\s+")
-        REGEX_GALAXY_CSRF_TOKEN = re.compile(r"session_csrf_token = \"(.*)\"")
         container_name: ClassVar[str]
         backend_config_file: ClassVar[str]
         provider_name: ClassVar[str]
@@ -354,18 +353,12 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
 
         # establish a web session
         session = requests.Session()
-        response = session.get(self._api_url("../login/start"))
-        matches = self.REGEX_GALAXY_CSRF_TOKEN.search(response.text)
-        assert matches
-        session_csrf_token = str(matches.groups(1)[0])
         response = session.post(
-            self._api_url("../user/login"),
-            data={
-                "login": "gxyuser_existing@galaxy.org",
-                "password": "test123",
-                "session_csrf_token": session_csrf_token,
-            },
+            self._api_url("../auth/login"),
+            json={"login": "gxyuser_existing@galaxy.org", "password": "test123"},
         )
+        self._assert_status_code_is(response, 200)
+        assert response.json()["message"] == "Success."
 
         response = session.get(self._api_url("users/current"))
         self._assert_status_code_is(response, 200)
@@ -379,7 +372,9 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
 
         # Should now automatically associate account
         parsed_url = parse.urlparse(response.url)
-        notification = parse.parse_qs(parsed_url.query)["notification"][0]
+        notification = parse.unquote(
+            parse.unquote(parse.parse_qs(parsed_url.query)["redirect"][0])
+        )
         assert "Your Keycloak identity has been linked to your Galaxy account." in notification
         response = session.get(self._api_url("users/current"))
         self._assert_status_code_is(response, 200)
@@ -842,18 +837,9 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
 
         # Establish a web session and log in as User A
         session = requests.Session()
-        response = session.get(self._api_url("../login/start"))
-        matches = self.REGEX_GALAXY_CSRF_TOKEN.search(response.text)
-        assert matches
-        session_csrf_token = str(matches.groups(1)[0])
-        response = session.post(
-            self._api_url("../user/login"),
-            data={
-                "login": "user_a@galaxy.org",
-                "password": "test123",
-                "session_csrf_token": session_csrf_token,
-            },
-        )
+        response = session.post(self._api_url("../auth/login"), json={"login": "user_a@galaxy.org", "password": "test123"})
+        self._assert_status_code_is(response, 200)
+        assert response.json()["message"] == "Success."
 
         # Verify we're logged in as User A
         response = session.get(self._api_url("users/current"))

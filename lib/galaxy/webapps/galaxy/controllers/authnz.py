@@ -169,6 +169,13 @@ class OIDC(BaseUIController):
         # Clear the login next cookie back to default.
         trans.set_cookie(value="/", name=LOGIN_NEXT_COOKIE_NAME)
         callback_url = trans.url_builder("/login/callback", redirect=quote(redirect_url, safe=""))
+        log.debug(
+            "OIDC callback for provider %s and user %s redirecting to %s via %s",
+            provider,
+            user.email if user is not None else None,
+            redirect_url,
+            callback_url,
+        )
         return trans.response.send_redirect(callback_url)
 
     @web.expose
@@ -197,6 +204,13 @@ class OIDC(BaseUIController):
         if redirect_url is None:
             redirect_url = url_for("/")
         callback_url = trans.url_builder("/login/callback", redirect=quote(redirect_url, safe=""))
+        log.debug(
+            "OIDC create_user for provider %s and user %s redirecting to %s via %s",
+            provider,
+            user.email if user is not None else None,
+            redirect_url,
+            callback_url,
+        )
         return trans.response.send_redirect(callback_url)
 
     @web.expose

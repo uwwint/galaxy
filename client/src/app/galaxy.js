@@ -6,7 +6,6 @@ import { User } from "./user";
 const DEFAULT_OPTIONS = {
     patchExisting: true,
     root: "/",
-    session_csrf_token: null,
 };
 
 export class GalaxyApp {
@@ -16,7 +15,6 @@ export class GalaxyApp {
 
         this.root = options.root || "/";
         this.params = options.params || {};
-        this.session_csrf_token = options.session_csrf_token || null;
 
         this._initLocale();
         this.config = options.config || {};

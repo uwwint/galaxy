@@ -31,6 +31,7 @@ from galaxy.webapps.galaxy.api import (
     DependsOnTrans,
     Router,
 )
+from galaxy.webapps.base.webapp import create_new_session
 from galaxy.work.context import SessionRequestContext
 
 router = Router(tags=["auth"])
@@ -57,11 +58,13 @@ def _request_remote_addr(trans: SessionRequestContext) -> Optional[str]:
 
 
 def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expires_at: Optional[datetime]) -> None:
-    response = trans.response
     max_age = 0
     if expires_at is not None:
         max_age = max(0, int((expires_at - datetime.utcnow()).total_seconds()))
-    response.set_cookie(
+    if hasattr(trans, "set_auth_cookie"):
+        trans.set_auth_cookie(refresh_token, expires_at)
+        return
+    trans.response.set_cookie(
         key=AUTH_SESSION_COOKIE_NAME,
         value=refresh_token,
         max_age=max_age,
@@ -74,8 +77,10 @@ def _set_refresh_cookie(trans: SessionRequestContext, refresh_token: str, expire
 
 
 def _clear_refresh_cookie(trans: SessionRequestContext) -> None:
-    response = trans.response
-    response.set_cookie(
+    if hasattr(trans, "clear_auth_cookie"):
+        trans.clear_auth_cookie()
+        return
+    trans.response.set_cookie(
         key=AUTH_SESSION_COOKIE_NAME,
         value="",
         max_age=0,
@@ -88,10 +93,13 @@ def _clear_refresh_cookie(trans: SessionRequestContext) -> None:
 
 
 def _set_legacy_session_cookie(trans: SessionRequestContext, galaxy_session) -> None:
-    response = trans.response
-    response.set_cookie(
+    session_cookie = util.unicodify(trans.security.encode_guid(galaxy_session.session_key))
+    if hasattr(trans, "set_cookie"):
+        trans.set_cookie(session_cookie, name="galaxysession", path=_cookie_path(trans))
+        return
+    trans.response.set_cookie(
         key="galaxysession",
-        value=trans.security.encode_guid(galaxy_session.session_key),
+        value=session_cookie,
         max_age=3600 * 24 * 90,
         path=_cookie_path(trans),
         domain=_cookie_domain(trans),
@@ -205,6 +213,10 @@ def _promote_browser_login_state(trans: SessionRequestContext, user: User) -> No
                 history, dataset=True, bypass_manage_permission=True
             )
         trans.sa_session.add(history)
+    if trans.galaxy_session is None:
+        trans.galaxy_session = create_new_session(trans, user_for_new_session=user)
+        trans.sa_session.add(trans.galaxy_session)
+        _set_legacy_session_cookie(trans, trans.galaxy_session)
     if trans.galaxy_session is not None:
         trans.galaxy_session.user = user
         if history is not None:

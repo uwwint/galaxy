@@ -26,7 +26,6 @@ vi.mock("@/components/User/UserPreferencesModel", () => ({
 
 vi.mock("@/app", () => ({
     getGalaxyInstance: () => ({
-        session_csrf_token: "mock-token",
     }),
 }));
 

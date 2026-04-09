@@ -499,6 +499,12 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
 
     actor_user = property(get_actor_user, set_actor_user)
 
+    def set_user_context(self, user, actor_user=None):
+        """Set the effective and actor users together."""
+        self.set_user(user)
+        if actor_user is not None:
+            self._actor_user = actor_user
+
     def get_cookie(self, name="galaxysession"):
         """Convenience method for getting a session cookie"""
         try:

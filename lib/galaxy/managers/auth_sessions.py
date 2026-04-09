@@ -1,3 +1,4 @@
+import logging
 import hashlib
 import secrets
 from collections.abc import Iterable
@@ -26,6 +27,8 @@ DEFAULT_REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME = timedelta(hours=1)
 REFRESH_TOKEN_KIND = "auth_refresh"
 AUTH_SESSION_COOKIE_NAME = "galaxy_refresh_token"
+
+log = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -123,6 +126,7 @@ class AuthSessionManager:
         auth_session.refresh_token_iat = None
         auth_session.refresh_token_expires_at = None
         self.sa_session.add(auth_session)
+        log.debug("Invalidated auth session %s", auth_session.id)
 
     def invalidate_sessions_for_user(self, user: User, *, exclude_auth_session_id: Optional[int] = None) -> int:
         stmt = select(self.model.AuthSession).where(self.model.AuthSession.user_id == user.id)
@@ -207,6 +211,7 @@ class AuthSessionManager:
         auth_session = self.get_session_by_id(auth_session_id)
         if auth_session is None:
             raise exceptions.AuthenticationFailed("Galaxy access token session was not found.")
+        log.debug("Resolved Galaxy access token to auth session %s", auth_session.id)
         return auth_session
 
     def _mint_jwt(
