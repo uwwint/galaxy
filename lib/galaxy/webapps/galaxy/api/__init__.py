@@ -165,6 +165,25 @@ def get_api_user(
     key: str = Security(api_key_query),
     x_api_key: str = Security(api_key_header),
     bearer_token: HTTPAuthorizationCredentials = Security(api_bearer_token),
+) -> Optional[User]:
+    if api_key := key or x_api_key:
+        user = user_manager.by_api_key(api_key=api_key)
+    elif bearer_token:
+        user = user_manager.by_oidc_access_token(access_token=bearer_token.credentials)
+    else:
+        return None
+    return user
+
+
+def get_api_actor_user(
+    api_user=cast(Optional[User], Depends(get_api_user)),
+) -> Optional[User]:
+    return api_user
+
+
+def get_effective_api_user(
+    user_manager: UserManager = depends(UserManager),
+    api_user=cast(Optional[User], Depends(get_api_user)),
     run_as: Optional[DecodedDatabaseIdField] = Header(
         default=None,
         title="Run as User",
@@ -174,23 +193,19 @@ def get_api_user(
         ),
     ),
 ) -> Optional[User]:
-    if api_key := key or x_api_key:
-        user = user_manager.by_api_key(api_key=api_key)
-    elif bearer_token:
-        user = user_manager.by_oidc_access_token(access_token=bearer_token.credentials)
-    else:
+    if api_user is None:
         return None
     if run_as:
-        if user_manager.user_can_do_run_as(user):
+        if user_manager.user_can_do_run_as(api_user):
             return user_manager.by_id(run_as)
         else:
             raise UserCannotRunAsException
-    return user
+    return api_user
 
 
 def get_user(
     galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
-    api_user=cast(Optional[User], Depends(get_api_user)),
+    api_user=cast(Optional[User], Depends(get_effective_api_user)),
 ) -> Optional[User]:
     if galaxy_session:
         return galaxy_session.user
@@ -199,13 +214,23 @@ def get_user(
 
 def get_required_user(
     galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
-    api_user=cast(Optional[User], Depends(get_api_user)),
+    api_user=cast(Optional[User], Depends(get_effective_api_user)),
 ) -> User:
     if galaxy_session and (user := galaxy_session.user):
         return user
     if api_user:
         return api_user
     raise UserRequiredException
+
+
+def get_actor_user(
+    galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
+    api_actor_user=cast(Optional[User], Depends(get_api_actor_user)),
+    effective_user=cast(Optional[User], Depends(get_user)),
+) -> Optional[User]:
+    if galaxy_session:
+        return galaxy_session.user
+    return api_actor_user or effective_user
 
 
 class UrlBuilder:
@@ -380,6 +405,7 @@ def get_trans(
     response: Response,
     app: StructuredApp = DependsOnApp,
     user=cast(Optional[User], Depends(get_user)),
+    actor_user=cast(Optional[User], Depends(get_actor_user)),
     galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
 ) -> SessionRequestContext:
     url_builder = UrlBuilder(request)
@@ -390,6 +416,7 @@ def get_trans(
     return SessionRequestContext(
         app=app,
         user=user,
+        actor_user=actor_user,
         galaxy_session=galaxy_session,
         url_builder=url_builder,
         request=galaxy_request,

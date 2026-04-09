@@ -24,6 +24,7 @@ from galaxy.config import CommonConfigurationMixin
 from galaxy.config_watchers import ConfigWatchers
 from galaxy.job_metrics import JobMetrics
 from galaxy.jobs.manager import NoopManager
+from galaxy.managers.auth_sessions import AuthSessionManager
 from galaxy.managers.collections import DatasetCollectionManager
 from galaxy.managers.dbkeys import GenomeBuilds
 from galaxy.managers.hdas import HDAManager
@@ -159,6 +160,8 @@ class MockApp(di.Container, GalaxyDataTestApp):
         self.application_stack = ApplicationStack()
         self.auth_manager = AuthManager(self.config)
         self.user_manager = UserManager(cast(BasicSharedApp, self))
+        self.auth_session_manager = AuthSessionManager(cast(BasicSharedApp, self))
+        self[AuthSessionManager] = self.auth_session_manager
         self.execution_timer_factory = Bunch(get_timer=StructuredExecutionTimer)
         self.interactivetool_manager = Bunch(create_interactivetool=lambda *args, **kwargs: None)
         self.is_job_handler = False
@@ -230,6 +233,8 @@ class MockAppConfig(GalaxyDataTestConfig, CommonConfigurationMixin):
         self.allow_user_dataset_purge = True
         self.allow_local_account_creation = True
         self.auth_config_file = "config/auth_conf.xml.sample"
+        self.cookie_domain = None
+        self.cookie_path = None
         self.custom_activation_email_message = "custom_activation_email_message"
         self.email_domain_allowlist_content = None
         self.email_domain_blocklist_content = None
@@ -241,6 +246,7 @@ class MockAppConfig(GalaxyDataTestConfig, CommonConfigurationMixin):
         self.expose_dataset_path = True
         self.hostname = "hostname"
         self.instance_resource_url = "instance_resource_url"
+        self.galaxy_infrastructure_url = None
         self.password_expiration_period = 0
         self.pretty_datetime_format = "pretty_datetime_format"
         self.redact_username_in_logs = False
@@ -332,6 +338,7 @@ class MockTrans:
 
         self.galaxy_session = None
         self.__user = user
+        self._actor_user = user
         self.security = self.app.security
         self.history = history
 
@@ -370,8 +377,18 @@ class MockTrans:
             self.sa_session.add(self.galaxy_session)
             self.sa_session.commit()
         self.__user = user
+        if self._actor_user is None or user is None:
+            self._actor_user = user
 
     user = property(get_user, set_user)
+
+    def get_actor_user(self):
+        return self._actor_user or self.get_user()
+
+    def set_actor_user(self, user):
+        self._actor_user = user
+
+    actor_user = property(get_actor_user, set_actor_user)
 
     def get_history(self, **kwargs):
         return self.history

@@ -12,9 +12,11 @@ from galaxy.managers.context import ProvidesHistoryContext
 
 if TYPE_CHECKING:
     from galaxy.model import (
+        AuthSession,
         GalaxySession,
         History,
         Role,
+        User,
     )
 
 
@@ -35,19 +37,35 @@ class WorkRequestContext(ProvidesHistoryContext):
         self,
         app,
         user=None,
+        actor_user=None,
         history: Optional["History"] = None,
         workflow_building_mode=False,
         url_builder=None,
+        auth_session: Optional["AuthSession"] = None,
         galaxy_session: Optional["GalaxySession"] = None,
+        auth_source: Optional[
+            Literal["anonymous", "session", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"]
+        ] = None,
     ):
         self._app = app
         self.__user = user
+        self._actor_user = actor_user or user
         self.__user_current_roles: Optional[list[Role]] = None
         self.__history = history
         self._url_builder = url_builder
         self._short_term_cache: dict[tuple[str, ...], Any] = {}
         self.workflow_building_mode = workflow_building_mode
+        self.auth_session = auth_session
         self.galaxy_session = galaxy_session
+        self._auth_source = auth_source
+
+    def set_user_context(self, user: Optional["User"], actor_user: Optional["User"] = None) -> None:
+        self.__user = user
+        self._actor_user = actor_user if actor_user is not None else user
+        self.__user_current_roles = None
+
+    def clear_user_context(self) -> None:
+        self.set_user_context(None)
 
     @property
     def app(self):
@@ -66,7 +84,13 @@ class WorkRequestContext(ProvidesHistoryContext):
 
     def get_user(self):
         """Return the current user if logged in or None."""
-        return self.__user
+        if self.__user is not None:
+            return self.__user
+        if self.auth_session is not None:
+            return self.auth_session.user
+        if self.galaxy_session is not None:
+            return self.galaxy_session.user
+        return None
 
     def get_current_user_roles(self):
         if self.__user_current_roles is None:
@@ -175,7 +199,11 @@ class SessionRequestContext(WorkRequestContext):
     def set_history(self, history):
         if history and not history.deleted and self.galaxy_session:
             self.galaxy_session.current_history = history
-        self.sa_session.add(self.galaxy_session)
+        if history and not history.deleted and self.auth_session:
+            self.auth_session.current_history = history
+            self.sa_session.add(self.auth_session)
+        if self.galaxy_session:
+            self.sa_session.add(self.galaxy_session)
         self.sa_session.commit()
 
 
@@ -191,8 +219,11 @@ def proxy_work_context_for_history(
     return WorkRequestContext(
         app=trans.app,
         user=trans.user,
+        actor_user=trans.actor_user,
         history=history or trans.history,
         url_builder=trans.url_builder,
         workflow_building_mode=workflow_building_mode,
+        auth_session=trans.auth_session,
         galaxy_session=trans.galaxy_session,
+        auth_source=trans.auth_source,
     )

@@ -186,6 +186,7 @@ def legacy_expose_api(func, to_json=True, user_required=True):
             if not trans.user_can_do_run_as:
                 error_message = "User does not have permissions to run jobs as another user"
                 return error
+            actor_user = trans.user
             try:
                 decoded_user_id = trans.security.decode_id(kwargs["payload"]["run_as"])
             except TypeError:
@@ -193,6 +194,7 @@ def legacy_expose_api(func, to_json=True, user_required=True):
                 return f"Malformed user id ( {str(kwargs['payload']['run_as'])} ) specified, unable to decode."
             try:
                 user = trans.sa_session.query(trans.app.model.User).get(decoded_user_id)
+                trans.actor_user = actor_user
                 trans.set_user(user)
             except Exception:
                 trans.response.status = 400
@@ -324,6 +326,7 @@ def expose_api(func, to_json=True, user_required=True, user_or_session_required=
             if not trans.user_can_do_run_as:
                 error_code = error_codes.USER_CANNOT_RUN_AS
                 return __api_error_response(trans, err_code=error_code, status_code=403)
+            actor_user = trans.user
             try:
                 decoded_user_id = trans.security.decode_id(kwargs["payload"]["run_as"])
             except (TypeError, ValueError):
@@ -332,6 +335,7 @@ def expose_api(func, to_json=True, user_required=True, user_or_session_required=
                 return __api_error_response(trans, err_code=error_code, err_msg=error_message, status_code=400)
             try:
                 user = trans.sa_session.query(trans.app.model.User).get(decoded_user_id)
+                trans.actor_user = actor_user
                 trans.set_user(user)
             except Exception:
                 error_code = error_codes.USER_INVALID_RUN_AS

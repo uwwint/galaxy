@@ -334,6 +334,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         # and such).
         self.workflow_building_mode = False
         self.__user = None
+        self._actor_user = None
         self.galaxy_session = None
         self.error_message = None
         self.host = self.request.host
@@ -481,8 +482,18 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                 self.sa_session.add(self.galaxy_session)
                 self.sa_session.commit()
         self.__user = user
+        if self._actor_user is None or user is None:
+            self._actor_user = user
 
     user = property(get_user, set_user)
+
+    def get_actor_user(self):
+        return self._actor_user or self.get_user()
+
+    def set_actor_user(self, user):
+        self._actor_user = user
+
+    actor_user = property(get_actor_user, set_actor_user)
 
     def get_cookie(self, name="galaxysession"):
         """Convenience method for getting a session cookie"""

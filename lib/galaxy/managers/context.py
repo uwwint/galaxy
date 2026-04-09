@@ -38,6 +38,7 @@ A method that requires a user but not a history should declare its
 import abc
 import string
 from collections.abc import Callable
+from dataclasses import dataclass
 from json import dumps
 from typing import (
     Any,
@@ -50,6 +51,7 @@ from sqlalchemy import select
 
 from galaxy.exceptions import UserActivationRequiredException
 from galaxy.model import (
+    AuthSession,
     Dataset,
     Event,
     GalaxySession,
@@ -66,6 +68,18 @@ from galaxy.security.idencoding import IdEncodingHelper
 from galaxy.security.vault import UserVaultWrapper
 from galaxy.structured_app import MinimalManagerApp
 from galaxy.util import bunch
+
+
+@dataclass(frozen=True)
+class RequestIdentity:
+    user: Optional[User]
+    actor_user: Optional[User]
+    auth_session: Optional[AuthSession]
+    galaxy_session: Optional[GalaxySession]
+    history: Optional[History]
+    auth_source: Literal[
+        "anonymous", "session", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"
+    ] = "unknown"
 
 
 class ProvidesAppContext:
@@ -199,9 +213,11 @@ class ProvidesUserContext(ProvidesAppContext):
     """
 
     workflow_building_mode: Literal[1, True, False] = False
+    auth_session: Optional[AuthSession] = None
     galaxy_session: Optional[GalaxySession] = None
     _tag_handler: Optional[GalaxyTagHandlerSession] = None
     _short_term_cache: dict[tuple[str, ...], Any]
+    _actor_user: Optional[User] = None
 
     def set_cache_value(self, args: tuple[str, ...], value: Any):
         self._short_term_cache[args] = value
@@ -219,8 +235,17 @@ class ProvidesUserContext(ProvidesAppContext):
     def async_request_user(self) -> RequestUser:
         galaxy_session_id = self.galaxy_session.id if self.galaxy_session else None
         if self.user is None:
-            return RequestUser(galaxy_session_id=galaxy_session_id)
-        return RequestUser(user_id=self.user.id, galaxy_session_id=galaxy_session_id)
+            return RequestUser(
+                actor_user_id=self.actor_user.id if self.actor_user else None,
+                auth_session_id=self.auth_session.id if self.auth_session else None,
+                galaxy_session_id=galaxy_session_id,
+            )
+        return RequestUser(
+            user_id=self.user.id,
+            actor_user_id=self.actor_user.id if self.actor_user else None,
+            auth_session_id=self.auth_session.id if self.auth_session else None,
+            galaxy_session_id=galaxy_session_id,
+        )
 
     @property
     @abc.abstractmethod
@@ -233,8 +258,61 @@ class ProvidesUserContext(ProvidesAppContext):
         return UserVaultWrapper(self.app.vault, self.user)
 
     def get_user(self) -> Optional[User]:
-        user = cast(Optional[User], self.user or self.galaxy_session and self.galaxy_session.user)
+        user = cast(
+            Optional[User],
+            self.user
+            or self.auth_session
+            and self.auth_session.user
+            or self.galaxy_session
+            and self.galaxy_session.user,
+        )
         return user
+
+    def get_actor_user(self) -> Optional[User]:
+        if self._actor_user is not None:
+            return self._actor_user
+        return self.get_user()
+
+    def set_actor_user(self, user: Optional[User]) -> None:
+        self._actor_user = user
+
+    actor_user = property(get_actor_user, set_actor_user)
+
+    @property
+    def auth_source(
+        self,
+    ) -> Literal["anonymous", "session", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"]:
+        if self._auth_source is not None:
+            return cast(
+                Literal[
+                    "anonymous", "session", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"
+                ],
+                self._auth_source,
+            )
+        if self.auth_session is not None:
+            return "galaxy_token"
+        if self.galaxy_session is not None:
+            if (
+                self.app.config.use_remote_user
+                and self.galaxy_session.user is not None
+                and self.galaxy_session.user.external
+            ):
+                return "remote_user"
+            return "session"
+        if self.user is not None:
+            return "api"
+        return "anonymous"
+
+    @property
+    def request_identity(self) -> RequestIdentity:
+        return RequestIdentity(
+            user=self.get_user(),
+            actor_user=self.actor_user,
+            auth_session=self.auth_session,
+            galaxy_session=self.galaxy_session,
+            history=self.history,
+            auth_source=self.auth_source,
+        )
 
     @property
     def anonymous(self) -> bool:

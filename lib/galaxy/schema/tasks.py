@@ -44,6 +44,7 @@ class GeneratePdfDownload(Model):
 # serialize user info for tasks
 class RequestUser(Model):
     user_id: Optional[int] = None
+    actor_user_id: Optional[int] = None
     galaxy_session_id: Optional[int] = None
 
 

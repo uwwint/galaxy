@@ -53,6 +53,7 @@ from galaxy.job_metrics import JobMetrics
 from galaxy.jobs.manager import JobManager
 from galaxy.managers.agents import AgentService
 from galaxy.managers.api_keys import ApiKeyManager
+from galaxy.managers.auth_sessions import AuthSessionManager
 from galaxy.managers.citations import CitationsManager
 from galaxy.managers.collections import DatasetCollectionManager
 from galaxy.managers.dbkeys import GenomeBuilds
@@ -641,6 +642,8 @@ class GalaxyManagerApplication(MinimalManagerApp, MinimalGalaxyApplication):
         self.tag_handler = self._register_singleton(GalaxyTagHandler, tag_handler)
         self.user_manager = self._register_singleton(UserManager)
         self._register_singleton(GalaxySessionManager)
+        auth_session_manager = AuthSessionManager(self)
+        self.auth_session_manager = self._register_singleton(AuthSessionManager, auth_session_manager)
         self.hda_manager = self._register_singleton(HDAManager)
         self.history_manager = self._register_singleton(HistoryManager)
         self.job_search = self._register_singleton(JobSearch)

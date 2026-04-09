@@ -885,6 +885,11 @@ class User(Base, Dictifiable, RepresentById):
     galaxy_sessions: Mapped[list["GalaxySession"]] = relationship(
         back_populates="user", order_by=lambda: desc(GalaxySession.update_time)
     )
+    auth_sessions: Mapped[list["AuthSession"]] = relationship(
+        foreign_keys=lambda: [AuthSession.user_id],
+        back_populates="user",
+        order_by=lambda: desc(AuthSession.update_time),
+    )
     object_stores: Mapped[list["UserObjectStore"]] = relationship(back_populates="user")
     file_sources: Mapped[list["UserFileSource"]] = relationship(back_populates="user")
     quotas: Mapped[list["UserQuotaAssociation"]] = relationship(back_populates="user")
@@ -8506,6 +8511,41 @@ class GalaxySession(Base, RepresentById):
         self.disk_usage = bytes
 
     total_disk_usage = property(get_disk_usage, set_disk_usage)
+
+
+class AuthSession(Base, RepresentById):
+    __tablename__ = "auth_session"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    create_time: Mapped[datetime] = mapped_column(default=now, nullable=True)
+    update_time: Mapped[datetime] = mapped_column(default=now, onupdate=now, nullable=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("galaxy_user.id"), index=True)
+    impersonator_user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("galaxy_user.id"), index=True)
+    remote_host: Mapped[Optional[str]] = mapped_column(String(255))
+    remote_addr: Mapped[Optional[str]] = mapped_column(String(255))
+    referer: Mapped[Optional[str]] = mapped_column(TEXT)
+    current_history_id: Mapped[Optional[int]] = mapped_column(ForeignKey("history.id"), index=True)
+    session_type: Mapped[str] = mapped_column(TrimmedString(32), default="browser", index=True)
+    auth_source: Mapped[str] = mapped_column(TrimmedString(32), default="anonymous", index=True)
+    refresh_token_hash: Mapped[Optional[str]] = mapped_column(TrimmedString(255), unique=True, index=True)
+    refresh_token_iat: Mapped[Optional[datetime]]
+    refresh_token_expires_at: Mapped[Optional[datetime]] = mapped_column(index=True)
+    is_valid: Mapped[bool] = mapped_column(default=False, index=True)
+    last_activity: Mapped[Optional[datetime]] = mapped_column(index=True)
+    impersonation_started_at: Mapped[Optional[datetime]]
+    user: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[user_id],
+        back_populates="auth_sessions",
+    )
+    impersonator_user: Mapped[Optional["User"]] = relationship(foreign_keys=[impersonator_user_id])
+    current_history: Mapped[Optional["History"]] = relationship()
+
+    def __init__(self, is_valid=False, **kwd):
+        super().__init__(**kwd)
+        self.session_type = self.session_type or "browser"
+        self.auth_source = self.auth_source or "anonymous"
+        self.is_valid = is_valid
+        self.last_activity = self.last_activity or now()
 
 
 class GalaxySessionToHistoryAssociation(Base, RepresentById):
