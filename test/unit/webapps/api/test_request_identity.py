@@ -15,6 +15,12 @@ from galaxy.webapps.galaxy.api import (
 from galaxy.work.context import WorkRequestContext
 
 
+def _make_galaxy_access_token(app, user):
+    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
+    access_token = app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+    return auth_session, access_token
+
+
 def test_work_request_context_defaults_actor_user_to_effective_user():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]
@@ -75,7 +81,6 @@ def test_effective_api_user_preserves_actor_user_for_run_as():
     resolved_actor_user = get_actor_user(
         bearer_auth_session=None,
         cookie_auth_session=None,
-        galaxy_session=None,
         api_actor_user=actor_user,
         effective_user=effective_user,
     )
@@ -88,8 +93,7 @@ def test_galaxy_bearer_token_resolves_auth_session():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]
     user = user_manager.create(email="user1@example.org", username="user1", password="password")
-    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
-    access_token = app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+    auth_session, access_token = _make_galaxy_access_token(app, user)
 
     resolved_auth_session = get_auth_session_from_bearer_token(
         auth_session_manager=app.auth_session_manager,
@@ -105,8 +109,7 @@ def test_invalid_galaxy_bearer_token_does_not_fall_through_to_external_oidc():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]
     user = user_manager.create(email="user1@example.org", username="user1", password="password")
-    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
-    access_token = app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])
+    _, access_token = _make_galaxy_access_token(app, user)
     invalid_access_token = f"{access_token.rsplit('.', 1)[0]}.invalidsignature"
 
     with pytest.raises(exceptions.AuthenticationFailed):
@@ -133,19 +136,17 @@ def test_external_oidc_bearer_token_still_resolves_via_oidc_path(monkeypatch):
     assert resolved_user == user
 
 
-def test_auth_source_prefers_galaxy_token_over_legacy_session():
+def test_auth_source_prefers_galaxy_token():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]
     user = user_manager.create(email="user1@example.org", username="user1", password="password")
-    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
+    auth_session, _ = _make_galaxy_access_token(app, user)
 
     auth_source = get_auth_source(
-        app=app,
         key=None,
         x_api_key=None,
         bearer_auth_session=auth_session,
         cookie_auth_session=None,
-        galaxy_session=None,
         api_user=None,
     )
 

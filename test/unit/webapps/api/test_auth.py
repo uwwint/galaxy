@@ -122,7 +122,15 @@ def _cookie_value(trans, key):
     return None
 
 
-def test_bootstrap_creates_auth_session_from_legacy_session():
+def _make_auth_session(app, user, auth_source="galaxy_token", issue_refresh=False):
+    auth_session = app.auth_session_manager.create_session(user=user, auth_source=auth_source)
+    refresh_token = None
+    if issue_refresh:
+        refresh_token = app.auth_session_manager.issue_refresh_token(auth_session)
+    return auth_session, refresh_token
+
+
+def test_bootstrap_creates_auth_session():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
     history = model.History(user=user)
@@ -142,8 +150,7 @@ def test_bootstrap_creates_auth_session_from_legacy_session():
 def test_refresh_rotates_cookie_for_existing_auth_session():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
-    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
-    old_refresh_token = app.auth_session_manager.issue_refresh_token(auth_session)
+    auth_session, old_refresh_token = _make_auth_session(app, user, issue_refresh=True)
     trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
 
     payload = refresh(trans=trans)
@@ -267,8 +274,7 @@ def test_login_resends_activation_email_outside_grace_period():
 def test_logout_invalidates_current_auth_session_and_clears_cookie():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
-    auth_session = app.auth_session_manager.create_session(user=user, auth_source="galaxy_token")
-    app.auth_session_manager.issue_refresh_token(auth_session)
+    auth_session, _ = _make_auth_session(app, user, issue_refresh=True)
     trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
 
     response = logout(trans=trans)

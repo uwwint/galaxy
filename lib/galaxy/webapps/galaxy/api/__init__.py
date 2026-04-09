@@ -84,11 +84,9 @@ from galaxy.managers.auth_sessions import (
     AUTH_SESSION_COOKIE_NAME,
     AuthSessionManager,
 )
-from galaxy.managers.session import GalaxySessionManager
 from galaxy.managers.users import UserManager
 from galaxy.model import User
 from galaxy.schema.fields import DecodedDatabaseIdField
-from galaxy.security.idencoding import IdEncodingHelper
 from galaxy.structured_app import StructuredApp
 from galaxy.tool_util.parameters import (
     HasToolParameters,
@@ -106,7 +104,6 @@ from galaxy.work.context import (
 
 api_key_query = APIKeyQuery(name="key", auto_error=False)
 api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
-api_key_cookie = APIKeyCookie(name="galaxysession", auto_error=False)
 auth_session_cookie = APIKeyCookie(name=AUTH_SESSION_COOKIE_NAME, auto_error=False)
 api_bearer_token = HTTPBearer(auto_error=False)
 
@@ -151,26 +148,8 @@ def depends(dep_type: type[T], app=get_app_with_request_session) -> T:
     return cast(T, GalaxyTypeDepends(_do_resolve, dep_type))
 
 
-def get_session_manager(app: StructuredApp = DependsOnApp) -> GalaxySessionManager:
-    # TODO: find out how to adapt dependency for Galaxy/Report/TS
-    return GalaxySessionManager(app.model)
-
-
 def get_auth_session_manager(app: StructuredApp = DependsOnApp) -> AuthSessionManager:
     return app.auth_session_manager
-
-
-def get_session(
-    session_manager=cast(GalaxySessionManager, Depends(get_session_manager)),
-    security: IdEncodingHelper = depends(IdEncodingHelper),
-    galaxysession: str = Security(api_key_cookie),
-) -> Optional[model.GalaxySession]:
-    if galaxysession:
-        session_key = security.decode_guid(galaxysession)
-        if session_key:
-            return session_manager.get_session_from_session_key(session_key)
-        # TODO: What should we do if there is no session? Since this is the API, maybe nothing is the right choice?
-    return None
 
 
 def get_auth_session_from_refresh_cookie(
@@ -255,29 +234,23 @@ def get_effective_api_user(
 def get_user(
     bearer_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_bearer_token)),
     cookie_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_refresh_cookie)),
-    galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
     api_user=cast(Optional[User], Depends(get_effective_api_user)),
 ) -> Optional[User]:
     if bearer_auth_session and bearer_auth_session.user:
         return bearer_auth_session.user
     if cookie_auth_session and cookie_auth_session.user:
         return cookie_auth_session.user
-    if galaxy_session:
-        return galaxy_session.user
     return api_user
 
 
 def get_required_user(
     bearer_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_bearer_token)),
     cookie_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_refresh_cookie)),
-    galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
     api_user=cast(Optional[User], Depends(get_effective_api_user)),
 ) -> User:
     if bearer_auth_session and (user := bearer_auth_session.user):
         return user
     if cookie_auth_session and (user := cookie_auth_session.user):
-        return user
-    if galaxy_session and (user := galaxy_session.user):
         return user
     if api_user:
         return api_user
@@ -287,7 +260,6 @@ def get_required_user(
 def get_actor_user(
     bearer_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_bearer_token)),
     cookie_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_refresh_cookie)),
-    galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
     api_actor_user=cast(Optional[User], Depends(get_api_actor_user)),
     effective_user=cast(Optional[User], Depends(get_user)),
 ) -> Optional[User]:
@@ -295,8 +267,6 @@ def get_actor_user(
         return bearer_auth_session.user
     if cookie_auth_session:
         return cookie_auth_session.user
-    if galaxy_session:
-        return galaxy_session.user
     return api_actor_user or effective_user
 
 
@@ -308,24 +278,18 @@ def get_auth_session(
 
 
 def get_auth_source(
-    app: StructuredApp = DependsOnApp,
     key: str = Security(api_key_query),
     x_api_key: str = Security(api_key_header),
     bearer_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_bearer_token)),
     cookie_auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session_from_refresh_cookie)),
-    galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
     api_user=cast(Optional[User], Depends(get_api_user)),
-) -> Literal["anonymous", "session", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"]:
+) -> Literal["anonymous", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"]:
     if bearer_auth_session or cookie_auth_session:
-        return "galaxy_token"
+        return bearer_auth_session.auth_source if bearer_auth_session else cookie_auth_session.auth_source
     if key or x_api_key:
         return "api_key"
     if api_user is not None:
         return "external_oidc"
-    if galaxy_session:
-        if app.config.use_remote_user and galaxy_session.user is not None and galaxy_session.user.external:
-            return "remote_user"
-        return "session"
     return "anonymous"
 
 
@@ -482,12 +446,10 @@ DependsOnUser = cast(User, Depends(get_required_user))
 
 
 def get_current_history(
-    auth_session: Optional[model.AuthSession], galaxy_session: Optional[model.GalaxySession]
+    auth_session: Optional[model.AuthSession],
 ) -> Optional[model.History]:
     if auth_session:
         return auth_session.current_history
-    if galaxy_session:
-        return galaxy_session.current_history
     return None
 
 
@@ -507,9 +469,8 @@ def get_trans(
     user=cast(Optional[User], Depends(get_user)),
     actor_user=cast(Optional[User], Depends(get_actor_user)),
     auth_session=cast(Optional[model.AuthSession], Depends(get_auth_session)),
-    galaxy_session=cast(Optional[model.GalaxySession], Depends(get_session)),
     auth_source=cast(
-        Literal["anonymous", "session", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"],
+        Literal["anonymous", "galaxy_token", "api_key", "external_oidc", "remote_user", "api", "unknown"],
         Depends(get_auth_source),
     ),
 ) -> SessionRequestContext:
@@ -523,12 +484,11 @@ def get_trans(
         user=user,
         actor_user=actor_user,
         auth_session=auth_session,
-        galaxy_session=galaxy_session,
         auth_source=auth_source,
         url_builder=url_builder,
         request=galaxy_request,
         response=galaxy_response,
-        history=get_current_history(auth_session, galaxy_session),
+        history=get_current_history(auth_session),
     )
 
 
