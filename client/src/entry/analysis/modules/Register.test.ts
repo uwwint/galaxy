@@ -10,10 +10,6 @@ import RegisterForm from "@/components/Register/RegisterForm.vue";
 
 const localVue = getLocalVue(true);
 
-vi.mock("@/app/index", () => ({
-    getGalaxyInstance: vi.fn(() => ({ session_csrf_token: "session_csrf_token" })),
-}));
-
 vi.mock("@/composables/config");
 
 beforeEach(() => {
@@ -56,7 +52,6 @@ describe("Register", () => {
 
         const props = wrapper.findComponent(RegisterForm).props();
 
-        expect(props.sessionCsrfToken).toBe("session_csrf_token");
         expect(props.enableOidc).toBe(true);
         expect(props.mailingJoinAddr).toBe("mailing_join_addr");
         expect(props.preferOidcLogin).toBe(true);

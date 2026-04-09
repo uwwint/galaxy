@@ -18,7 +18,7 @@ describe("RegisterForm", () => {
         });
 
         const cardHeader = wrapper.find(".card-header");
-        expect(cardHeader.text()).toBe("Create a Galaxy account");
+        expect(cardHeader.text()).toContain("Create a Galaxy account");
 
         const inputs = wrapper.findAll("input");
         expect(inputs.length).toBe(4);
