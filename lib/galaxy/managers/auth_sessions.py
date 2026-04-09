@@ -25,6 +25,7 @@ DEFAULT_ACCESS_TOKEN_LIFETIME = timedelta(minutes=20)
 DEFAULT_REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 DEFAULT_TOOL_RUNNER_TOKEN_LIFETIME = timedelta(hours=1)
 REFRESH_TOKEN_KIND = "auth_refresh"
+AUTH_SESSION_COOKIE_NAME = "galaxy_refresh_token"
 
 
 def _utcnow() -> datetime:
@@ -104,6 +105,19 @@ class AuthSessionManager:
         self.sa_session.add(auth_session)
         return auth_session
 
+    def get_session_by_id(self, auth_session_id: int) -> Optional[AuthSession]:
+        stmt = (
+            select(self.model.AuthSession)
+            .where(self.model.AuthSession.id == auth_session_id)
+            .where(self.model.AuthSession.is_valid == true())
+            .options(
+                joinedload(self.model.AuthSession.user),
+                joinedload(self.model.AuthSession.current_history),
+            )
+            .limit(1)
+        )
+        return self.sa_session.scalars(stmt).first()
+
     def invalidate_session(self, auth_session: AuthSession) -> None:
         auth_session.is_valid = False
         auth_session.refresh_token_hash = None
@@ -158,6 +172,19 @@ class AuthSessionManager:
                     f"Galaxy access token is missing required scopes: {', '.join(missing_scopes)}."
                 )
         return payload
+
+    def get_session_for_access_token(
+        self, access_token: str, *, required_scopes: Optional[Iterable[str]] = None
+    ) -> AuthSession:
+        payload = self.decode_access_token(access_token, required_scopes=required_scopes)
+        try:
+            auth_session_id = int(payload["sid"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise exceptions.AuthenticationFailed("Galaxy access token is missing a valid session binding.") from exc
+        auth_session = self.get_session_by_id(auth_session_id)
+        if auth_session is None:
+            raise exceptions.AuthenticationFailed("Galaxy access token session was not found.")
+        return auth_session
 
     def _mint_jwt(
         self,

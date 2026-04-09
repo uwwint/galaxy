@@ -234,14 +234,15 @@ class ProvidesUserContext(ProvidesAppContext):
     @property
     def async_request_user(self) -> RequestUser:
         galaxy_session_id = self.galaxy_session.id if self.galaxy_session else None
-        if self.user is None:
+        current_user = self.get_user()
+        if current_user is None:
             return RequestUser(
                 actor_user_id=self.actor_user.id if self.actor_user else None,
                 auth_session_id=self.auth_session.id if self.auth_session else None,
                 galaxy_session_id=galaxy_session_id,
             )
         return RequestUser(
-            user_id=self.user.id,
+            user_id=current_user.id,
             actor_user_id=self.actor_user.id if self.actor_user else None,
             auth_session_id=self.auth_session.id if self.auth_session else None,
             galaxy_session_id=galaxy_session_id,
