@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BAlert, BButton, BCard, BForm, BFormGroup, BFormInput } from "bootstrap-vue";
 import { ref } from "vue";
 import { useRouter } from "vue-router/composables";
 
-import { withPrefix } from "@/utils/redirect";
+import { GalaxyApi } from "@/api";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 interface Props {
@@ -26,13 +25,18 @@ const variant = ref(props.messageVariant);
 
 async function submit() {
     try {
-        await axios.post(withPrefix("/auth/change_password"), {
-            token: props.token,
-            id: props.expiredUser,
-            current: current.value,
-            password: password.value,
-            confirm: confirm.value,
+        const { error } = await GalaxyApi().POST("/auth/change_password" as never, {
+            body: {
+                token: props.token,
+                id: props.expiredUser,
+                current: current.value,
+                password: password.value,
+                confirm: confirm.value,
+            },
         });
+        if (error) {
+            throw error;
+        }
 
         router.push("/");
     } catch (error: any) {

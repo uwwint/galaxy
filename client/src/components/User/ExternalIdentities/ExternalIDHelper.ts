@@ -1,6 +1,4 @@
-import axios from "axios";
-
-import { withPrefix } from "@/utils/redirect";
+import { GalaxyApi } from "@/api";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export type OIDCConfigEntry = {
@@ -55,9 +53,12 @@ export async function submitOIDCLogon(idp: string, redirectParam: string | null 
     formData.append("next", redirectParam ?? "");
 
     try {
-        const { data } = await axios.post<{ redirect_uri?: string }>(withPrefix(`/authnz/${idp}/login`), formData, {
-            withCredentials: true,
+        const { data, error } = await GalaxyApi().POST(`/authnz/${idp}/login` as never, {
+            body: formData,
         });
+        if (error) {
+            throw error;
+        }
         return data.redirect_uri ?? null;
     } catch (error) {
         rethrowSimple(error);
@@ -70,13 +71,13 @@ export async function submitOIDCLogon(idp: string, redirectParam: string | null 
  * @param idpHint    The entityID to hint with (ignored when useIDPHint = false)
  */
 export async function submitCILogon(useIDPHint = false, idpHint?: string): Promise<string | null> {
-    let url = withPrefix("/authnz/cilogon/login/");
-    if (useIDPHint && idpHint) {
-        url += `?idphint=${encodeURIComponent(idpHint)}`;
-    }
-
     try {
-        const { data } = await axios.post<{ redirect_uri?: string }>(url);
+        const { data, error } = await GalaxyApi().POST("/authnz/cilogon/login/" as never, {
+            params: useIDPHint && idpHint ? { query: { idphint: idpHint } } : undefined,
+        });
+        if (error) {
+            throw error;
+        }
         return data.redirect_uri ?? null;
     } catch (error) {
         rethrowSimple(error);

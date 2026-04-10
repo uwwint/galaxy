@@ -1,6 +1,7 @@
 import { getLocalVue } from "@tests/vitest/helpers";
 import { mount } from "@vue/test-utils";
 import flushPromises from "flush-promises";
+import { createPinia } from "pinia";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { HttpResponse, useServerMock } from "@/api/client/__mocks__";
@@ -15,6 +16,7 @@ const { server, http } = useServerMock();
 setupSelectableMock();
 
 const localVue = getLocalVue(true);
+const pinia = createPinia();
 
 const TEST_HISTORY_ID = "myTestHistoryId";
 
@@ -31,6 +33,19 @@ interface PutRequest {
 let putRequests: PutRequest[] = [];
 
 async function mountComponent(preferredObjectStoreId: string | null = null) {
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        value: {
+            getItem: (key: string) => storage.get(key) ?? null,
+            setItem: (key: string, value: string) => {
+                storage.set(key, value);
+            },
+            removeItem: (key: string) => {
+                storage.delete(key);
+            },
+        },
+    });
     server.use(
         http.get("/api/configuration", ({ response }) => {
             return response(200).json({});
@@ -54,6 +69,7 @@ async function mountComponent(preferredObjectStoreId: string | null = null) {
             showModal: true,
         },
         localVue,
+        pinia,
         stubs: {
             BModal: {
                 template: `

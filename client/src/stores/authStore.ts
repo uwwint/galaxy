@@ -1,10 +1,9 @@
-import axios from "axios";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
+import { GalaxyApi } from "@/api";
 import { getGalaxyInstance } from "@/app";
 import { User } from "@/app/user";
-import { withPrefix } from "@/utils/redirect";
 
 interface SerializedUser {
     id: string;
@@ -190,11 +189,17 @@ export const useAuthStore = defineStore("authStore", () => {
             ...(params ? { params } : {}),
             ...(csrfToken ? { headers: { "X-CSRF-Token": csrfToken } } : {}),
         };
-        const response = await axios.post(withPrefix(path), payload, Object.keys(config).length ? config : undefined);
-        if (response.data?.err_msg) {
-            throw new Error(response.data.err_msg);
+        const { data, error } = await GalaxyApi().POST(path as never, {
+            body: payload,
+            ...(Object.keys(config).length ? config : {}),
+        });
+        if (error) {
+            throw error;
         }
-        return response.data as T;
+        if (data?.err_msg) {
+            throw new Error(data.err_msg);
+        }
+        return data as T;
     }
 
     async function bootstrap(): Promise<BrowserAuthPayload> {

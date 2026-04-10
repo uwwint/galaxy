@@ -1,3 +1,4 @@
+import { GalaxyApi } from "@/api";
 import { getAppRoot } from "@/onload/loadConfig";
 import _l from "@/utils/localization";
 
@@ -43,10 +44,13 @@ export class User {
     }
 
     async loadFromApi(idOrCurrent = CURRENT_ID_STR) {
-        const url = `${this.urlRoot()}/${idOrCurrent}`;
         try {
-            const response = await fetch(url, { credentials: "same-origin" });
-            const data = await response.json();
+            const { data, error } = await GalaxyApi().GET("/api/users/{user_id}", {
+                params: { path: { user_id: idOrCurrent } },
+            });
+            if (error) {
+                throw error;
+            }
             this.attributes = { ...this.attributes, ...data };
             if (!this.attributes.preferences) {
                 this.attributes.preferences = {};

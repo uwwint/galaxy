@@ -1,21 +1,6 @@
-import axios, { type AxiosResponse } from "axios";
-
 import type { AnyHistory, HistorySummaryExtended } from "@/api";
 import { GalaxyApi } from "@/api";
-import { prependPath } from "@/utils/redirect";
 import { ApiError, errorMessageAsString, type GalaxyApiResult, rethrowSimple } from "@/utils/simple-error";
-
-/**
- * Generic json getter
- * @param response
- * @return response.data or throws an error if response status is not 200
- */
-function doResponse(response: AxiosResponse) {
-    if (response.status !== 200) {
-        throw new Error(response.statusText);
-    }
-    return response.data;
-}
 
 /**
  * Some current endpoints don't accept JSON, so we need to
@@ -42,13 +27,17 @@ const extendedHistoryParams = {
  * @return the new history or throws an error if new history creation fails
  */
 export async function createAndSelectNewHistory() {
-    const url = "history/create_new_current";
-    const response = await axios.get(prependPath(url));
-    const newHistoryId = response?.data?.id || null;
-    if (!newHistoryId) {
-        throw new Error("failed to create and select new history");
+    const { data, error } = await GalaxyApi().POST("/api/histories", {
+        body: { all_datasets: true, archive_type: "url" },
+    });
+
+    if (error) {
+        rethrowSimple(error);
     }
-    return doResponse(response);
+
+    const newHistory = data as AnyHistory;
+    const selectedHistory = await setCurrentHistoryOnServer(newHistory.id);
+    return selectedHistory ?? newHistory;
 }
 
 /**
@@ -57,9 +46,15 @@ export async function createAndSelectNewHistory() {
  * @return the current history
  */
 export async function getCurrentHistoryFromServer(since: string | undefined = undefined) {
-    const url = "history/current_history_json";
-    const response = await axios.get(prependPath(url), { params: { since: since } });
-    return doResponse(response);
+    const { data, error } = await GalaxyApi().GET("/api/histories/current", {
+        params: since ? { query: { since } } : undefined,
+    });
+
+    if (error) {
+        rethrowSimple(error);
+    }
+
+    return data;
 }
 
 /**
@@ -68,9 +63,15 @@ export async function getCurrentHistoryFromServer(since: string | undefined = un
  * @return the current history
  */
 export async function setCurrentHistoryOnServer(historyId: string) {
-    const url = "history/set_as_current";
-    const response = await axios.get(prependPath(url), { params: { id: historyId } });
-    return doResponse(response);
+    const { data, error } = await GalaxyApi().PUT("/api/histories/current/{history_id}", {
+        params: { path: { history_id: historyId } },
+    });
+
+    if (error) {
+        rethrowSimple(error);
+    }
+
+    return data;
 }
 
 /**
@@ -81,19 +82,25 @@ export async function setCurrentHistoryOnServer(historyId: string) {
  * @return list of histories
  */
 export async function getHistoryList(offset = 0, limit: number | null = null, queryString = "") {
-    // TODO: to convert this to openapi-fetch we need to fix the query string handling
-    // in the caller code to use the query object instead of a string
-
-    const params = `view=summary&order=update_time&offset=${offset}`;
-    let url = `api/histories?${params}`;
+    const query = new URLSearchParams(queryString);
+    const queryParams: Record<string, string | number> = {
+        view: "summary",
+        order: "update_time",
+        offset,
+    };
     if (limit !== null) {
-        url += `&limit=${limit}`;
+        queryParams.limit = limit;
     }
-    if (queryString !== "") {
-        url += `&${queryString}`;
+    query.forEach((value, key) => {
+        queryParams[key] = value;
+    });
+    const { data, error } = await GalaxyApi().GET("/api/histories", {
+        params: { query: queryParams },
+    });
+    if (error) {
+        rethrowSimple(error);
     }
-    const response = await axios.get(prependPath(url));
-    return doResponse(response);
+    return data;
 }
 
 /** Load one history by id */
@@ -122,9 +129,10 @@ export async function getHistoryByIdFromServer(id: string): Promise<GalaxyApiRes
  */
 export async function secureHistoryOnServer(history: AnyHistory) {
     const { id } = history;
-    const url = "history/make_private";
-    const response = await axios.post(prependPath(url), formData({ history_id: id }));
-    if (response.status !== 200) {
+    const { data, error, response } = await GalaxyApi().POST("/history/make_private" as never, {
+        body: formData({ history_id: id }),
+    });
+    if (error || response.status !== 200) {
         throw new Error(response.statusText);
     }
     const result = await getHistoryByIdFromServer(id);
@@ -133,8 +141,8 @@ export async function secureHistoryOnServer(history: AnyHistory) {
     }
     return {
         securedHistory: result.data,
-        message: response.data.message as string,
-        sharingStatusChanged: response.data.sharing_status_changed as boolean,
+        message: data.message as string,
+        sharingStatusChanged: data.sharing_status_changed as boolean,
     };
 }
 

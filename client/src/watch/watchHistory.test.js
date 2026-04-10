@@ -1,11 +1,49 @@
 import { suppressDebugConsole } from "@tests/vitest/helpers";
 import { createLocalVue, mount } from "@vue/test-utils";
 import { createPinia, mapState } from "pinia";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HttpResponse, useServerMock } from "@/api/client/__mocks__";
 import { useHistoryItemsStore } from "@/stores/historyItemsStore";
 import { useHistoryStore } from "@/stores/historyStore";
+
+vi.mock("@/components/History/HistoryFilters", () => ({
+    HistoryFilters: {
+        getFilterText: (filters) =>
+            filters
+                .map(([key, value]) => `${key}:${value}`)
+                .join(" "),
+        getFiltersForText: (filterText) =>
+            filterText
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((token) => {
+                    const separatorIndex = token.indexOf(":");
+                    if (separatorIndex === -1) {
+                        return ["name", token];
+                    }
+                    return [token.slice(0, separatorIndex), token.slice(separatorIndex + 1)];
+                }),
+        getFilterValue: (filterText, filterName) => {
+            const match = filterText
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((token) => token.split(":"))
+                .find(([key]) => key === filterName);
+            return match ? match[1] : null;
+        },
+        testFilters: (filters, item) =>
+            filters.every(([key, value]) => {
+                if (key === "state") {
+                    return item.state === value;
+                }
+                if (key === "name") {
+                    return String(item.name).includes(String(value));
+                }
+                return true;
+            }),
+    },
+}));
 
 import { watchHistoryOnce } from "./watchHistory";
 
@@ -63,7 +101,7 @@ describe("watchHistory", () => {
 
     it("sets up the history and history item stores", async () => {
         server.use(
-            http.untyped.get("/history/current_history_json", () => {
+            http.untyped.get("/api/histories/current", () => {
                 return HttpResponse.json(historyData);
             }),
             http.untyped.get(/api\/histories\/history-id\/contents?.*/, () => {
@@ -81,7 +119,7 @@ describe("watchHistory", () => {
 
         // Stage 1: Initial successful load
         server.use(
-            http.untyped.get("/history/current_history_json", () => {
+            http.untyped.get("/api/histories/current", () => {
                 return HttpResponse.json(historyData);
             }),
             http.untyped.get(/api\/histories\/history-id\/contents?.*/, () => {
@@ -96,7 +134,7 @@ describe("watchHistory", () => {
         // Stage 2: Failing request
         server.resetHandlers();
         server.use(
-            http.untyped.get("/history/current_history_json", () => {
+            http.untyped.get("/api/histories/current", () => {
                 return new HttpResponse(null, { status: 500 });
             }),
         );
@@ -110,7 +148,7 @@ describe("watchHistory", () => {
         // Stage 3: Recovery with updated data
         server.resetHandlers();
         server.use(
-            http.untyped.get("/history/current_history_json", () => {
+            http.untyped.get("/api/histories/current", () => {
                 return HttpResponse.json({ ...historyData, update_time: "1" });
             }),
             http.untyped.get(/api\/histories\/history-id\/contents?.*/, () => {

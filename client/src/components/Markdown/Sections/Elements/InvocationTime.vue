@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import axios from "axios";
 import { ref, watch } from "vue";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api";
 
 const props = defineProps<{
     invocationId: string;
@@ -12,7 +11,12 @@ const invocationTime = ref();
 
 async function fetchInvocation(invocationId: string) {
     try {
-        const { data } = await axios.get(`${getAppRoot()}api/invocations/${invocationId}`);
+        const { data, error } = await GalaxyApi().GET("/api/invocations/{invocation_id}", {
+            params: { path: { invocation_id: invocationId } },
+        });
+        if (error) {
+            throw error;
+        }
         if (data.create_time) {
             invocationTime.value = new Date(data.create_time).toUTCString();
         }

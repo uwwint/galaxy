@@ -149,7 +149,6 @@ import "vue-multiselect/dist/vue-multiselect.min.css";
 
 import { faSave, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import {
     BAlert,
     BButton,
@@ -166,9 +165,9 @@ import {
 } from "bootstrap-vue";
 import Multiselect from "vue-multiselect";
 
+import { GalaxyApi } from "@/api/client";
 import { useAuthStore } from "@/stores/authStore";
 import { useHistoryStore } from "@/stores/historyStore";
-import { withPrefix } from "@/utils/redirect";
 
 import GLink from "@/components/BaseComponents/GLink.vue";
 import BreadcrumbHeading from "@/components/Common/BreadcrumbHeading.vue";
@@ -198,10 +197,10 @@ export default {
         const authStore = useAuthStore();
         const currentUserId = authStore.effectiveUser?.id;
         return {
+            currentUserId,
             faSave,
             faTrash,
             breadcrumbItems: [{ title: "User Preferences", to: "/user" }, { title: "Current Custom Builds" }],
-            customBuildsUrl: withPrefix(`/api/users/${currentUserId}/custom_builds`),
             selectedInstalledBuilds: [],
             installedBuilds: [],
             maxFileSize: 100,
@@ -263,8 +262,10 @@ export default {
     },
     methods: {
         loadCustomBuilds() {
-            axios
-                .get(this.customBuildsUrl)
+            GalaxyApi()
+                .GET("/api/users/{user_id}/custom_builds", {
+                    params: { path: { user_id: this.currentUserId } },
+                })
                 .then((response) => {
                     this.customBuilds = response.data;
                 })
@@ -273,8 +274,10 @@ export default {
                 });
         },
         loadCustomBuildsMetadata(historyId) {
-            axios
-                .get(withPrefix(`/api/histories/${historyId}/custom_builds_metadata`))
+            GalaxyApi()
+                .GET("/api/histories/{history_id}/custom_builds_metadata", {
+                    params: { path: { history_id: historyId } },
+                })
                 .then((response) => {
                     const fastaHdas = response.data.fasta_hdas;
                     for (let i = 0; i < fastaHdas.length; i++) {
@@ -307,8 +310,11 @@ export default {
                 this.showAlert("danger", "All inputs are required.");
                 return false;
             }
-            axios
-                .put(`${this.customBuildsUrl}/${data.id}`, data)
+            GalaxyApi()
+                .PUT("/api/users/{user_id}/custom_builds/{build_id}", {
+                    params: { path: { user_id: this.currentUserId, build_id: data.id } },
+                    body: data,
+                })
                 .then((response) => {
                     if (response.data.message) {
                         this.showAlert("warning", response.data.message);
@@ -323,8 +329,10 @@ export default {
                 });
         },
         deleteBuild(id) {
-            axios
-                .delete(`${this.customBuildsUrl}/${id}`)
+            GalaxyApi()
+                .DELETE("/api/users/{user_id}/custom_builds/{build_id}", {
+                    params: { path: { user_id: this.currentUserId, build_id: id } },
+                })
                 .then((response) => {
                     this.customBuilds = this.customBuilds.filter((i) => i.id !== id);
                 })

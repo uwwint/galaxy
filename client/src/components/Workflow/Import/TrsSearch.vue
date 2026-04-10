@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { faTimes } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BAlert, BCard, BFormInput, BInputGroup, BInputGroupAppend } from "bootstrap-vue";
 import { computed, type Ref, ref, watch } from "vue";
 import { useRouter } from "vue-router/composables";
 
+import { GalaxyApi } from "@/api/client";
 import type { RowClickEvent, TableField } from "@/components/Common/GTable.types";
 import { getRedirectOnImportPath } from "@/components/Workflow/redirectPath";
 import { Services } from "@/components/Workflow/services";
 import { useMarkdown } from "@/composables/markdown";
-import { withPrefix } from "@/utils/redirect";
 
 import type { TrsSelection, TrsTool as TrsSearchData } from "./types";
 
@@ -79,10 +78,10 @@ watch(query, async () => {
         loading.value = true;
 
         try {
-            const response = await axios.get(
-                withPrefix(`/api/trs_search?query=${query.value}&trs_server=${trsServer.value}`),
-            );
-            results.value = response.data;
+            const { data } = await GalaxyApi().GET("/api/trs_search", {
+                params: { query: { query: query.value, trs_server: trsServer.value } },
+            });
+            results.value = data;
         } catch (e) {
             errorMessage.value = e as string;
         }

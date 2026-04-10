@@ -30,10 +30,10 @@
 </template>
 
 <script>
-import axios from "axios";
 import BootstrapVue from "bootstrap-vue";
 import Vue from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { fromSteps } from "@/components/Workflow/Editor/modules/labels";
 import { getAppRoot } from "@/onload/loadConfig";
 
@@ -360,8 +360,10 @@ export default {
             this.selectedShow = true;
         },
         async getVisualizations() {
-            axios
-                .get(`${getAppRoot()}api/plugins?embeddable=True`)
+            GalaxyApi()
+                .GET("/api/plugins", {
+                    params: { query: { embeddable: true } },
+                })
                 .then(({ data }) => {
                     this.visualizationSection.elems = data.map((x) => {
                         return {

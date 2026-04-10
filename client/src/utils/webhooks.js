@@ -1,6 +1,4 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api";
 import { rethrowSimple } from "@/utils/simple-error";
 
 let webhookData = undefined;
@@ -8,7 +6,10 @@ let webhookData = undefined;
 async function getWebhookData() {
     if (webhookData === undefined) {
         try {
-            const { data } = await axios.get(`${getAppRoot()}api/webhooks`);
+            const { data, error } = await GalaxyApi().GET("/api/webhooks");
+            if (error) {
+                throw error;
+            }
             webhookData = data;
         } catch (e) {
             rethrowSimple(e);

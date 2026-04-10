@@ -1,7 +1,5 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api";
 import { type Input, permissionInputParts } from "@/composables/datasetPermissions";
-import { withPrefix } from "@/utils/redirect";
 
 export function getPermissionsUrl(historyId: string) {
     return `/history/permissions?id=${historyId}`;
@@ -12,13 +10,16 @@ export interface PermissionsResponse {
 }
 
 export function getPermissions(historyId: string) {
-    const permissionsUrl = getPermissionsUrl(historyId);
-    return axios.get(withPrefix(permissionsUrl));
+    return GalaxyApi().GET("/history/permissions" as never, {
+        params: { query: { id: historyId } },
+    });
 }
 
 export function setPermissions(historyId: string, formContents: object) {
-    const permissionsUrl = getPermissionsUrl(historyId);
-    return axios.put(withPrefix(permissionsUrl), formContents);
+    return GalaxyApi().PUT("/history/permissions" as never, {
+        params: { query: { id: historyId } },
+        body: formContents,
+    });
 }
 
 export function makePrivate(historyId: string, permissionResponse: PermissionsResponse) {

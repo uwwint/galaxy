@@ -1,9 +1,8 @@
-import axios from "axios";
 import { escape } from "lodash";
 
+import { GalaxyApi } from "@/api";
 import { buildCollectionFromRules } from "@/components/Collections/common/buildCollectionModal";
 import { Toast } from "@/composables/toast";
-import { getAppRoot } from "@/onload/loadConfig";
 import { useHistoryStore } from "@/stores/historyStore";
 import Modal from "@/utils/modal";
 
@@ -32,12 +31,20 @@ class ImportCollectionModal {
     }
 
     async fetchUserHistories() {
-        const { data } = await axios.get(`${getAppRoot()}api/histories`);
+        const { data, error } = await GalaxyApi().GET("/api/histories");
+        if (error) {
+            throw new Error("Failed to load histories");
+        }
         this.histories = data;
     }
 
     async createNewHistory(new_history_name) {
-        const { data } = await axios.post(`${getAppRoot()}api/histories`, { name: new_history_name });
+        const { data, error } = await GalaxyApi().POST("/api/histories", {
+            body: { name: new_history_name },
+        });
+        if (error) {
+            throw new Error("Failed to create history");
+        }
         const { setCurrentHistory } = useHistoryStore();
         await setCurrentHistory(data.id);
         return data;

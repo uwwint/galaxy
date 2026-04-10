@@ -1,31 +1,30 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { SingleQueryProvider } from "@/components/providers/SingleQueryProvider";
-import { getAppRoot } from "@/onload/loadConfig";
 import { rethrowSimple } from "@/utils/simple-error";
 
 import { cleanPaginationParameters } from "./utils";
 
 export function storedWorkflowsProvider(ctx, callback, extraParams = {}) {
     const { root, ...requestParams } = ctx;
-    const apiUrl = `${root}api/workflows`;
     const cleanParams = cleanPaginationParameters(requestParams);
-    const promise = axios.get(apiUrl, { params: { ...cleanParams, ...extraParams } });
+    const promise = GalaxyApi().GET("/api/workflows", {
+        params: { query: { ...cleanParams, ...extraParams } },
+    });
 
     // Must return a promise that resolves to an array of items
-    return promise.then((data) => {
+    return promise.then(({ data, response }) => {
         // Pluck the array of items off our axios response
-        const items = data.data;
-        callback && callback(data);
+        callback && callback({ data, response });
         // Must return an array of items or an empty array if an error occurred
-        return items || [];
+        return data || [];
     });
 }
 
 async function storedWorkflowDetails({ storedWorkflowId }) {
-    const url = `${getAppRoot()}api/workflows/${storedWorkflowId}`;
     try {
-        const { data } = await axios.get(url);
+        const { data } = await GalaxyApi().GET("/api/workflows/{workflow_id}", {
+            params: { path: { workflow_id: storedWorkflowId } },
+        });
         return data;
     } catch (e) {
         rethrowSimple(e);

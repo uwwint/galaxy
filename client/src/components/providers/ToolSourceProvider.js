@@ -1,18 +1,16 @@
-import axios from "axios";
 import beautify from "xml-beautifier";
 import { stringify } from "yaml";
 
+import { GalaxyApi } from "@/api/client";
 import { SingleQueryProvider } from "@/components/providers/SingleQueryProvider";
-import { getAppRoot } from "@/onload/loadConfig";
 import { rethrowSimple } from "@/utils/simple-error";
 
 async function toolSource({ id, uuid }) {
-    let url = `${getAppRoot()}api/tools/${id || uuid}/raw_tool_source`;
-    if (uuid) {
-        url += `?tool_uuid=${uuid}`;
-    }
     try {
-        const { data, headers } = await axios.get(url);
+        const { data, response } = await GalaxyApi().GET("/api/tools/{tool_id}/raw_tool_source", {
+            params: { path: { tool_id: id || uuid }, ...(uuid ? { query: { tool_uuid: uuid } } : {}) },
+        });
+        const headers = response.headers;
         const result = {};
         result.language = headers.language;
         if (headers.language === "xml") {

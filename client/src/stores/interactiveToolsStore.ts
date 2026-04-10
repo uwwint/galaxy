@@ -1,8 +1,7 @@
-import axios from "axios";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 import { useEntryPointStore } from "@/stores/entryPointStore";
 import { rethrowSimple } from "@/utils/simple-error";
 
@@ -16,8 +15,9 @@ export const useInteractiveToolsStore = defineStore("interactiveToolsStore", () 
      */
     async function stopInteractiveTool(id: string, name?: string) {
         try {
-            const url = `${getAppRoot()}api/entry_points/${id}`;
-            await axios.delete(url);
+            await GalaxyApi().DELETE("/api/entry_points/{id}", {
+                params: { path: { id } },
+            });
             entryPointStore.removeEntryPoint(id);
             return true;
         } catch (error) {

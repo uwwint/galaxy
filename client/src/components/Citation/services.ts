@@ -1,14 +1,16 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api";
 import { rethrowSimple } from "@/utils/simple-error";
 
 import type { CitationsResult } from ".";
 
 export async function getCitations(source: string, id: string): Promise<CitationsResult> {
     try {
-        const request = await axios.get(`${getAppRoot()}api/${source}/${id}/citations`);
-        const rawCitations = request.data;
+        const { data: rawCitations, error } = await GalaxyApi().GET(`/api/${source}/{id}/citations` as never, {
+            params: { path: { id } },
+        });
+        if (error) {
+            throw error;
+        }
         const citations = [];
         const warnings: string[] = [];
         const { Cite } = await import("./cite");

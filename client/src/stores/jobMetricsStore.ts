@@ -1,9 +1,8 @@
-import axios from "axios";
 import { defineStore } from "pinia";
 import Vue, { computed, ref } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import type { JobMetric } from "@/api/jobs";
-import { prependPath } from "@/utils/redirect";
 
 export const useJobMetricsStore = defineStore("jobMetricsStore", () => {
     const jobMetricsByHdaId = ref<Record<string, JobMetric[]>>({});
@@ -28,8 +27,12 @@ export const useJobMetricsStore = defineStore("jobMetricsStore", () => {
             return;
         }
 
-        const path = prependPath(`api/datasets/${datasetId}/metrics?hda_ldda=${datasetType}`);
-        const jobMetrics = (await axios.get<JobMetric[]>(path)).data;
+        const { data: jobMetrics } = await GalaxyApi().GET("/api/datasets/{dataset_id}/metrics", {
+            params: {
+                path: { dataset_id: datasetId },
+                query: { hda_ldda: datasetType },
+            },
+        });
         const jobMetricsObject = datasetType == "hda" ? jobMetricsByHdaId : jobMetricsByLddaId;
 
         Vue.set(jobMetricsObject.value, datasetId, jobMetrics);
@@ -40,8 +43,11 @@ export const useJobMetricsStore = defineStore("jobMetricsStore", () => {
             return;
         }
 
-        const path = prependPath(`api/jobs/${jobId}/metrics`);
-        const jobMetrics = (await axios.get<JobMetric[]>(path)).data;
+        const { data: jobMetrics } = await GalaxyApi().GET("/api/jobs/{job_id}/metrics", {
+            params: {
+                path: { job_id: jobId },
+            },
+        });
 
         Vue.set(jobMetricsByJobId.value, jobId, jobMetrics);
     }

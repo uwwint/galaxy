@@ -75,10 +75,9 @@
 </template>
 
 <script>
-import axios from "axios";
 import { debounce } from "lodash";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 import Alert from "@/components/Alert.vue";
 import GButton from "@/components/BaseComponents/GButton.vue";
@@ -127,8 +126,8 @@ export default {
         },
         load() {
             this.loading = true;
-            axios
-                .get(`${getAppRoot()}data_manager/data_managers_list`)
+            GalaxyApi()
+                .GET("/data_manager/data_managers_list")
                 .then((response) => {
                     console.log("response", response);
                     this.dataManagers = response.data.dataManagers;

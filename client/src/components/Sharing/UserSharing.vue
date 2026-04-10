@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import axios from "axios";
 import {
     BAlert,
     BButton,
@@ -15,10 +14,10 @@ import { storeToRefs } from "pinia";
 import { computed, ref } from "vue";
 import Multiselect from "vue-multiselect";
 
+import { GalaxyApi } from "@/api";
 import type { AnyShareableItemWithStatus, ShareOption } from "@/api";
 import { isShareableHistoryWithStatus } from "@/api";
 import { useConfig } from "@/composables/config";
-import { getAppRoot } from "@/onload";
 import { useUserStore } from "@/stores/userStore";
 import { assertArray } from "@/utils/assertions";
 
@@ -67,8 +66,12 @@ async function onSearchChanged(searchValue: string) {
         userOptions.value = [];
     } else {
         try {
-            const response = await axios.get(`${getAppRoot()}api/users?f_email=${searchValue}`);
-            const data = response.data;
+            const { data, error } = await GalaxyApi().GET("/api/users", {
+                params: { query: { f_email: searchValue } },
+            });
+            if (error) {
+                throw error;
+            }
             assertArray(data);
 
             userOptions.value = (data as Array<{ email: string }>).filter(

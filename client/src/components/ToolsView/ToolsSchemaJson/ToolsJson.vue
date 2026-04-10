@@ -3,9 +3,7 @@
 </template>
 
 <script>
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 export default {
     data() {
@@ -13,8 +11,10 @@ export default {
     },
     async created() {
         let tools = [];
-        await axios
-            .get(`${getAppRoot()}api/tools?in_panel=False&tool_help=True`)
+        await GalaxyApi()
+            .GET("/api/tools", {
+                params: { query: { in_panel: false, tool_help: true } },
+            })
             .then(({ data }) => {
                 tools = data.reduce((acc, item) => {
                     acc[item.id] = item;
@@ -25,8 +25,8 @@ export default {
                 console.error("List of all tools not loaded", error);
             });
         if (Object.keys(tools).length > 0) {
-            await axios
-                .get(`${getAppRoot()}api/tool_panels/default`)
+            await GalaxyApi()
+                .GET("/api/tool_panels/default")
                 .then(({ data }) => {
                     this.schemaTagObj = this.createToolsJson(tools, data);
                     const el = document.createElement("script");
@@ -55,9 +55,9 @@ export default {
                                   applicationCategory: "Web application",
                                   name: tool.name,
                                   description: tool.help || tool.description,
-                                  softwareVersion: tool.version,
-                                  url: getAppRoot() + String(tool.link).substring(1),
-                              },
+                            softwareVersion: tool.version,
+                            url: String(tool.link),
+                        },
                           ]
                         : _acc;
                 }

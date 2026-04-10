@@ -10,13 +10,12 @@ import {
     faTrashRestore,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BButton, BDropdown } from "bootstrap-vue";
 //@ts-ignore deprecated package without types (vue 2, remove this comment on vue 3 migration)
 import { ScanEye } from "lucide-vue";
 import { computed, type Ref, ref } from "vue";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 import { useEntryPointStore } from "@/stores/entryPointStore";
 import localize from "@/utils/localization";
 import { prependPath } from "@/utils/redirect";
@@ -76,9 +75,9 @@ async function stopInteractiveTool() {
     }
 
     try {
-        const root = getAppRoot();
-        const url = `${root}api/entry_points/${props.interactiveToolId}`;
-        await axios.delete(url);
+        await GalaxyApi().DELETE("/api/entry_points/{id}", {
+            params: { path: { id: props.interactiveToolId } },
+        });
         entryPointStore.removeEntryPoint(props.interactiveToolId);
     } catch (error) {
         console.error("Failed to stop interactive tool:", error);

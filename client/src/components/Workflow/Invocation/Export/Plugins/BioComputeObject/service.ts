@@ -1,7 +1,7 @@
 import axios from "axios";
 
+import { GalaxyApi } from "@/api";
 import { Toast } from "@/composables/toast";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 import { wait } from "@/utils/utils";
 
@@ -37,22 +37,43 @@ async function generateBcoContent(invocationId: string) {
         include_deleted: false,
         include_hidden: false,
     };
-    const response = await axios.post(withPrefix(`/api/invocations/${invocationId}/prepare_store_download`), data);
-    const storage_request_id = response.data.storage_request_id;
-    const pollUrl = withPrefix(`/api/short_term_storage/${storage_request_id}/ready`);
-    const resultUrl = withPrefix(`/api/short_term_storage/${storage_request_id}`);
-    let pollingResponse = await axios.get(pollUrl);
+    const { data: responseData, error } = await GalaxyApi().POST("/api/invocations/{invocation_id}/prepare_store_download", {
+        params: { path: { invocation_id: invocationId } },
+        body: data,
+    });
+    if (error) {
+        throw error;
+    }
+    const storage_request_id = responseData.storage_request_id;
+    const { data: readyData, error: readyError } = await GalaxyApi().GET("/api/short_term_storage/{storage_request_id}/ready", {
+        params: { path: { storage_request_id } },
+    });
+    if (readyError) {
+        throw readyError;
+    }
+    let pollingResponse = readyData;
     let maxRetries = 120;
-    while (!pollingResponse.data && maxRetries) {
+    while (!pollingResponse && maxRetries) {
         await wait(2000);
-        pollingResponse = await axios.get(pollUrl);
+        const { data, error: retryError } = await GalaxyApi().GET("/api/short_term_storage/{storage_request_id}/ready", {
+            params: { path: { storage_request_id } },
+        });
+        if (retryError) {
+            throw retryError;
+        }
+        pollingResponse = data;
         maxRetries -= 1;
     }
-    if (!pollingResponse.data) {
+    if (!pollingResponse) {
         throw Error("Timeout waiting for BioCompute Object export result!");
     } else {
-        const resultResponse = await axios.get(resultUrl);
-        return resultResponse.data;
+        const { data: resultData, error: resultError } = await GalaxyApi().GET("/api/short_term_storage/{storage_request_id}", {
+            params: { path: { storage_request_id } },
+        });
+        if (resultError) {
+            throw resultError;
+        }
+        return resultData;
     }
 }
 

@@ -2,15 +2,14 @@
 import { faTimesCircle } from "@fortawesome/free-regular-svg-icons";
 import { faInfoCircle, faWrench } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BAlert } from "bootstrap-vue";
 import { computed, onUnmounted, ref, watch } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import type { WorkflowInvocationElementView } from "@/api/invocations";
 import type { WorkflowStepTyped } from "@/api/workflows";
 import { useDatatypesMapper } from "@/composables/datatypesMapper";
 import type { GraphStep } from "@/composables/useInvocationGraph";
-import { getAppRoot } from "@/onload/loadConfig";
 import { useInvocationStore } from "@/stores/invocationStore";
 
 import Heading from "../Common/Heading.vue";
@@ -177,10 +176,12 @@ async function fetchStepConfig() {
     loadingStepConfig.value = true;
     try {
         const step = props.graphStep ?? props.workflowStep;
-        const { data } = await axios.post(`${getAppRoot()}api/workflows/build_module`, {
-            type: step.type,
-            content_id: "content_id" in step ? step.content_id : step.tool_id,
-            tool_state: "tool_state" in step ? step.tool_state : {},
+        const { data } = await GalaxyApi().POST("/api/workflows/build_module", {
+            body: {
+                type: step.type,
+                content_id: "content_id" in step ? step.content_id : step.tool_id,
+                tool_state: "tool_state" in step ? step.tool_state : {},
+            },
         });
         stepConfigData.value = data;
     } finally {

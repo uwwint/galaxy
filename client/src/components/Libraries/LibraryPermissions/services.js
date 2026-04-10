@@ -1,6 +1,4 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export class Services {
@@ -9,71 +7,86 @@ export class Services {
     }
 
     async getLibraryPermissions(id) {
-        const url = `${this.root}api/libraries/${id}/permissions?scope=current`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/libraries/{library_id}/permissions", {
+                params: { path: { library_id: id }, query: { scope: "current" } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async getLibrary(id) {
-        const url = `${this.root}api/libraries/${id}`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/libraries/{library_id}", {
+                params: { path: { library_id: id } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async getFolderPermissions(id) {
-        const url = `${this.root}api/folders/${id}/permissions?scope=current`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/folders/{folder_id}/permissions", {
+                params: { path: { folder_id: id }, query: { scope: "current" } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async getDatasetPermissions(id) {
-        const url = `${this.root}api/libraries/datasets/${id}/permissions?scope=current`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/libraries/datasets/{dataset_id}/permissions", {
+                params: { path: { dataset_id: id }, query: { scope: "current" } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async getDataset(id) {
-        const url = `${this.root}api/libraries/datasets/${id}`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/libraries/datasets/{dataset_id}", {
+                params: { path: { dataset_id: id } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async getFolder(id) {
-        const url = `${this.root}api/folders/${id}`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/folders/{folder_id}", {
+                params: { path: { folder_id: id } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async getSelectOptions(apiRootUrl, id, is_library_access, page, page_limit, searchQuery) {
-        searchQuery = searchQuery ? `&q=${searchQuery}` : "";
-        const url = `${apiRootUrl}/${id}/permissions?scope=available&is_library_access=${is_library_access}&page_limit=${page_limit}&page=${page}${searchQuery}`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET(`${apiRootUrl}/{id}/permissions`, {
+                params: {
+                    path: { id },
+                    query: {
+                        scope: "available",
+                        is_library_access,
+                        page_limit,
+                        page,
+                        ...(searchQuery ? { q: searchQuery } : {}),
+                    },
+                },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
@@ -88,8 +101,11 @@ export class Services {
             });
         });
 
-        axios
-            .post(`${apiRootUrl}/${id}/permissions`, data)
+        GalaxyApi()
+            .POST(`${apiRootUrl}/{id}/permissions`, {
+                params: { path: { id } },
+                body: data,
+            })
             .then(function (response) {
                 onSuccess(response);
             })
@@ -99,12 +115,13 @@ export class Services {
     }
 
     async toggleDatasetPrivacy(id, isMakePrivate, onSuccess, onError) {
-        await axios
-            .post(
-                `${getAppRoot()}api/libraries/datasets/${id}/permissions?action=${
-                    isMakePrivate ? "make_private" : "remove_restrictions"
-                }`,
-            )
+        await GalaxyApi()
+            .POST("/api/libraries/datasets/{dataset_id}/permissions", {
+                params: {
+                    path: { dataset_id: id },
+                    query: { action: isMakePrivate ? "make_private" : "remove_restrictions" },
+                },
+            })
             .then((fetched_permissions) => {
                 onSuccess(fetched_permissions.data);
             })

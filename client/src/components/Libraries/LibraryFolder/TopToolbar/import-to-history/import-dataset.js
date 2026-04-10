@@ -1,8 +1,9 @@
-import axios from "axios";
 import { escape } from "lodash";
 
+import { GalaxyApi } from "@/api";
 import { Toast } from "@/composables/toast";
 import { getAppRoot } from "@/onload/loadConfig";
+import { useHistoryStore } from "@/stores/historyStore";
 import _l from "@/utils/localization";
 import Modal from "@/utils/modal";
 
@@ -66,7 +67,10 @@ class ImportDatasetModal {
     }
 
     async fetchUserHistories() {
-        const { data } = await axios.get(`${getAppRoot()}api/histories`);
+        const { data, error } = await GalaxyApi().GET("/api/histories");
+        if (error) {
+            throw new Error("Failed to load histories");
+        }
         this.histories = data;
     }
 
@@ -75,9 +79,16 @@ class ImportDatasetModal {
         var new_history_name = modal.el.querySelector('input[name="history_name"]').value;
         if (new_history_name !== "") {
             try {
-                const { data: new_history } = await axios.post(`${getAppRoot()}api/histories`, {
-                    name: new_history_name,
+                const { data: new_history, error } = await GalaxyApi().POST("/api/histories", {
+                    body: {
+                        name: new_history_name,
+                    },
                 });
+                if (error) {
+                    throw new Error("Failed to create history");
+                }
+                const { setCurrentHistory } = useHistoryStore();
+                await setCurrentHistory(new_history.id);
                 this.processImportToHistory(new_history.id, new_history.name);
             } catch {
                 Toast.error("An error occurred.");
@@ -89,12 +100,14 @@ class ImportDatasetModal {
             const selectedOption = selectEl.options[selectEl.selectedIndex];
             var history_id = selectedOption.value;
             var history_name = selectedOption.textContent;
+            const { setCurrentHistory } = useHistoryStore();
+            await setCurrentHistory(history_id);
             this.processImportToHistory(history_id, history_name);
             modal.enableButton("Import");
         }
     }
 
-    processImportToHistory(history_id, history_name) {
+    async processImportToHistory(history_id, history_name) {
         var checked_items = this.findCheckedItems();
         var items_to_import = [];
 
@@ -118,8 +131,7 @@ class ImportDatasetModal {
             history_name: history_name,
         });
 
-        axios.get(`${getAppRoot()}history/set_as_current?id=${history_id}`).catch(() => {});
-        this.chainCallImportingIntoHistory(items_to_import, history_name, history_id);
+        await this.chainCallImportingIntoHistory(items_to_import, history_name, history_id);
     }
 
     initChainCallControlToHistory(options) {
@@ -131,14 +143,19 @@ class ImportDatasetModal {
     }
 
     async chainCallImportingIntoHistory(items, history_name, history_id) {
-        const contentsUrl = `${getAppRoot()}api/histories/${history_id}/contents`;
         while (items.length > 0) {
             var item = items.pop();
             try {
-                await axios.post(contentsUrl, {
-                    content: item.content,
-                    source: item.source,
+                const { error } = await GalaxyApi().POST("/api/histories/{history_id}/contents/{type}s", {
+                    params: { path: { history_id }, type: "dataset" },
+                    body: {
+                        content: item.content,
+                        source: item.source,
+                    },
                 });
+                if (error) {
+                    throw error;
+                }
             } catch {
                 this.options.chain_call_control.failed_number += 1;
             }

@@ -21,11 +21,10 @@
 */
 import { faDownload, faSpinner } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 
+import { GalaxyApi } from "@/api/client";
 import { useConfig } from "@/composables/config";
 import { Toast } from "@/composables/toast";
-import { getAppRoot } from "@/onload/loadConfig";
 import { withPrefix } from "@/utils/redirect";
 
 import GButton from "./BaseComponents/GButton.vue";
@@ -94,8 +93,10 @@ export default {
                 window.open(withPrefix(this.fallbackUrl));
             } else {
                 this.waiting = true;
-                axios
-                    .post(this.downloadEndpoint, this.postParameters)
+                GalaxyApi()
+                    .POST(this.downloadEndpoint, {
+                        body: this.postParameters,
+                    })
                     .then(this.handleInitialize)
                     .catch(this.handleError);
             }
@@ -105,9 +106,10 @@ export default {
             this.pollStorageRequestId(storageRequestId);
         },
         pollStorageRequestId(storageRequestId) {
-            const url = `${getAppRoot()}api/short_term_storage/${storageRequestId}/ready`;
-            axios
-                .get(url)
+            GalaxyApi()
+                .GET("/api/short_term_storage/{storage_request_id}/ready", {
+                    params: { path: { storage_request_id: storageRequestId } },
+                })
                 .then((r) => {
                     this.handlePollResponse(r, storageRequestId);
                 })
@@ -116,8 +118,7 @@ export default {
         handlePollResponse(response, storageRequestId) {
             const ready = response.data;
             if (ready) {
-                const url = `${getAppRoot()}api/short_term_storage/${storageRequestId}`;
-                window.location.assign(url);
+                window.location.assign(`/api/short_term_storage/${storageRequestId}`);
                 this.waiting = false;
             } else {
                 this.pollAfterDelay(storageRequestId);

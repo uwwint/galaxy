@@ -1,11 +1,9 @@
 import { faEdit, faKey, faPlus, faTrash, faTrashRestore } from "@fortawesome/free-solid-svg-icons";
 import { useEventBus } from "@vueuse/core";
-import axios from "axios";
 
 import { GalaxyApi } from "@/api";
 import Filtering, { contains, equals, toBool, type ValidFilter } from "@/utils/filtering";
 import _l from "@/utils/localization";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import type { ActionArray, FieldArray, GridConfig } from "./types";
@@ -28,8 +26,12 @@ async function getData(offset: number, limit: number, search: string, sort_by: s
         sort_by: sort_by,
         sort_desc: String(sort_desc),
     };
-    const queryString = new URLSearchParams(query).toString();
-    const { data } = await axios.get(withPrefix(`/admin/groups_list?${queryString}`));
+    const { data, error } = await GalaxyApi().GET("/admin/groups_list" as never, {
+        params: { query },
+    });
+    if (error) {
+        throw error;
+    }
     return [data.rows, data.rows_total];
 }
 

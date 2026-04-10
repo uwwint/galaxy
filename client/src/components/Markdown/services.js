@@ -1,10 +1,7 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export async function copyCollection(hdcaId, historyId) {
-    const url = `${getAppRoot()}api/histories/${historyId}/contents/dataset_collections`;
     const payload = {
         source: "hdca",
         type: "dataset_collection",
@@ -12,7 +9,10 @@ export async function copyCollection(hdcaId, historyId) {
         copy_elements: true,
     };
     try {
-        const { data } = await axios.post(url, payload);
+        const { data } = await GalaxyApi().POST("/api/histories/{history_id}/contents/dataset_collections", {
+            params: { path: { history_id: historyId } },
+            body: payload,
+        });
         return data;
     } catch (e) {
         rethrowSimple(e);

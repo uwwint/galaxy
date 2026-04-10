@@ -167,10 +167,9 @@
 </template>
 
 <script>
-import axios from "axios";
 import { ref } from "vue";
 
-import { GalaxyApi } from "@/api";
+import { GalaxyApi } from "@/api/client";
 import { NON_TERMINAL_STATES } from "@/api/jobs";
 import { jobsProvider } from "@/components/providers/JobProvider";
 import { getAppRoot } from "@/onload/loadConfig";
@@ -185,8 +184,10 @@ import FilterMenu from "@/components/Common/FilterMenu.vue";
 import Heading from "@/components/Common/Heading.vue";
 
 function cancelJob(jobId, message) {
-    const url = `${getAppRoot()}api/jobs/${jobId}`;
-    return axios.delete(url, { data: { message: message } });
+    return GalaxyApi().DELETE("/api/jobs/{job_id}", {
+        params: { path: { job_id: jobId } },
+        body: { message: message },
+    });
 }
 
 export default {
@@ -396,7 +397,7 @@ export default {
             return `${getAppRoot()}jobs/${jobId}/view`;
         },
         onStopJobs() {
-            axios.all(this.selectedStopJobIds.map((jobId) => cancelJob(jobId, this.stopMessage))).then((res) => {
+            Promise.all(this.selectedStopJobIds.map((jobId) => cancelJob(jobId, this.stopMessage))).then((res) => {
                 if (this.sendNotification) {
                     this.sendNotificationToUsers();
                 }

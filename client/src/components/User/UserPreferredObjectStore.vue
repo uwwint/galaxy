@@ -1,12 +1,10 @@
 <script setup lang="ts">
-import axios from "axios";
 import { storeToRefs } from "pinia";
 import { computed, ref } from "vue";
 
-import { isRegisteredUser } from "@/api";
+import { GalaxyApi, isRegisteredUser } from "@/api";
 import { useConfigStore } from "@/stores/configurationStore";
 import { useUserStore } from "@/stores/userStore";
-import { prependPath } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import GModal from "../BaseComponents/GModal.vue";
@@ -44,10 +42,14 @@ function resetModal() {
 
 async function handleSubmit(preferred: string | null) {
     const payload = { preferred_object_store_id: preferred };
-    const url = prependPath("api/users/current");
 
     try {
-        await axios.put(url, payload);
+        const { error } = await GalaxyApi().PUT("/api/users/current", {
+            body: payload,
+        });
+        if (error) {
+            throw error;
+        }
 
         selectedObjectStoreId.value = preferred;
     } catch (e) {

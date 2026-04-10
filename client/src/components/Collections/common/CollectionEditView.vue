@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { faBars, faCog, faDatabase, faSave, faTable } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BAlert, BSpinner } from "bootstrap-vue";
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 
-import { GalaxyApi } from "@/api";
+import { GalaxyApi } from "@/api/client";
 import { updateContentFields } from "@/components/History/model/queries";
 import { DatatypesProvider, DbKeyProvider, SuitableConvertersProvider } from "@/components/providers";
 import { useConfig } from "@/composables/config";
@@ -120,7 +119,6 @@ async function clickedSave(attribute: string, newValue: any) {
 
 // TODO: Replace with actual datatype type
 async function clickedConvert(selectedConverter: any) {
-    const url = prependPath(`/api/tools/${selectedConverter.tool_id}/convert`);
     const data = {
         src: "hdca",
         id: props.collectionId,
@@ -129,7 +127,10 @@ async function clickedConvert(selectedConverter: any) {
     };
 
     try {
-        await axios.post(url, data).catch(handleError);
+        await GalaxyApi().POST(`/api/tools/{tool_id}/convert` as never, {
+            params: { path: { tool_id: selectedConverter.tool_id } },
+            body: data,
+        }).catch(handleError);
         successMessage.value = "Conversion started successfully.";
     } catch (err) {
         errorMessage.value = errorMessageAsString(err, "Conversion failed.");

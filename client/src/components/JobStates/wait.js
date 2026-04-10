@@ -1,15 +1,14 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { ERROR_STATES, NON_TERMINAL_STATES } from "@/api/jobs";
-import { getAppRoot } from "@/onload/loadConfig";
 
 export function waitOnJob(jobId, onStateUpdate = null, interval = 1000) {
     // full=true to capture standard error on last iteration for building
     // error messages.
-    const jobUrl = `${getAppRoot()}api/jobs/${jobId}?full=true`;
     const checkCondition = function (resolve, reject) {
-        axios
-            .get(jobUrl)
+        GalaxyApi()
+            .GET("/api/jobs/{job_id}", {
+                params: { path: { job_id: jobId }, query: { full: true } },
+            })
             .then((jobResponse) => {
                 const state = jobResponse.data.state;
                 if (onStateUpdate !== null) {

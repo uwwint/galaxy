@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { faBook, faCaretDown, faDownload, faHome, faPlus, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import {
     BAlert,
     BButton,
@@ -13,7 +12,7 @@ import {
 } from "bootstrap-vue";
 import { computed, reactive, ref } from "vue";
 
-import { GalaxyApi } from "@/api";
+import { GalaxyApi } from "@/api/client";
 import type { CollectionBuilderType } from "@/components/Collections/common/buildCollectionModal";
 import { Services } from "@/components/Libraries/LibraryFolder/services";
 import { deleteSelectedItems } from "@/components/Libraries/LibraryFolder/TopToolbar/delete-selected";
@@ -23,7 +22,6 @@ import mod_import_dataset from "@/components/Libraries/LibraryFolder/TopToolbar/
 import type { SelectionItem } from "@/components/SelectionDialog/selectionTypes";
 import { useConfig } from "@/composables/config";
 import { Toast } from "@/composables/toast";
-import { getAppRoot } from "@/onload";
 import { useUserStore } from "@/stores/userStore";
 
 import CollectionCreatorIndex from "@/components/Collections/CollectionCreatorIndex.vue";
@@ -302,7 +300,9 @@ function onAddDatasetsFromHistory(selectedDatasets: SelectionItem[]) {
 
 function onAddDatasetsDirectory(selectedDatasets: Record<string, string | boolean>[]) {
     const datasetApiCall = async (dataset: Record<string, string | boolean>) => {
-        await axios.post(`${getAppRoot()}api/libraries/datasets`, dataset);
+        await GalaxyApi().POST("/api/libraries/datasets", {
+            body: dataset,
+        });
     };
 
     addDatasets(selectedDatasets, datasetApiCall);

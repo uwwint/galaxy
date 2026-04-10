@@ -47,12 +47,11 @@
 </template>
 
 <script>
-import axios from "axios";
 import BootstrapVue from "bootstrap-vue";
 import Vue from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { waitOnJob } from "@/components/JobStates/wait";
-import { getAppRoot } from "@/onload/loadConfig";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import ExportLink from "./ExportLink.vue";
@@ -118,9 +117,10 @@ export default {
     methods: {
         loadExports() {
             this.loadingExports = true;
-            const url = `${getAppRoot()}api/histories/${this.historyId}/exports`;
-            axios
-                .get(url)
+            GalaxyApi()
+                .GET("/api/histories/{history_id}/exports", {
+                    params: { path: { history_id: this.historyId } },
+                })
                 .then((response) => {
                     this.loadingExports = false;
                     this.exports = response.data;
@@ -134,9 +134,10 @@ export default {
         },
         regenerateExport() {
             this.waitingOnJob = true;
-            const url = `${getAppRoot()}api/histories/${this.historyId}/exports`;
-            axios
-                .put(url)
+            GalaxyApi()
+                .PUT("/api/histories/{history_id}/exports", {
+                    params: { path: { history_id: this.historyId } },
+                })
                 .then((response) => {
                     const status = response.status;
                     if (status == 200) {

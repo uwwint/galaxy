@@ -1,6 +1,4 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export async function setAttributes(datasetId: string, settings: object, operation: string) {
@@ -10,11 +8,10 @@ export async function setAttributes(datasetId: string, settings: object, operati
         ...settings,
     };
 
-    const url = `${getAppRoot()}dataset/set_edit`;
-
     try {
-        const { data } = await axios.put(url, payload);
-
+        const { data } = await GalaxyApi().PUT("/dataset/set_edit", {
+            body: payload,
+        });
         return data;
     } catch (e) {
         rethrowSimple(e);

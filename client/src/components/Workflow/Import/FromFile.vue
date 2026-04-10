@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BAlert, BForm, BFormFile, BFormGroup } from "bootstrap-vue";
 import { computed, type Ref, ref, watch } from "vue";
 import { useRouter } from "vue-router/composables";
 
+import { GalaxyApi } from "@/api";
 import { getRedirectOnImportPath } from "@/components/Workflow/redirectPath";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import GButton from "@/components/BaseComponents/GButton.vue";
@@ -65,8 +64,13 @@ async function submit(ev: SubmitEvent) {
     loading.value = true;
 
     try {
-        const response = await axios.post(withPrefix("/api/workflows"), formData);
-        const path = getRedirectOnImportPath(response.data);
+        const { data, error } = await GalaxyApi().POST("/api/workflows", {
+            body: formData,
+        });
+        if (error) {
+            throw error;
+        }
+        const path = getRedirectOnImportPath(data);
 
         router.push(path);
     } catch (error) {

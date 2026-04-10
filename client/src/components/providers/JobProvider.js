@@ -1,15 +1,14 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { SingleQueryProvider } from "@/components/providers/SingleQueryProvider";
-import { getAppRoot } from "@/onload/loadConfig";
 import { rethrowSimple } from "@/utils/simple-error";
 
 import { cleanPaginationParameters, stateIsTerminal } from "./utils";
 
 async function jobDetails({ jobId }) {
-    const url = `${getAppRoot()}api/jobs/${jobId}?full=True`;
     try {
-        const { data } = await axios.get(url);
+        const { data } = await GalaxyApi().GET("/api/jobs/{job_id}", {
+            params: { path: { job_id: jobId }, query: { full: true } },
+        });
         return data;
     } catch (e) {
         rethrowSimple(e);
@@ -23,17 +22,15 @@ async function jobConsoleOutput({
     stderr_position = 0,
     stderr_length = 0,
 }) {
-    const url =
-        `${getAppRoot()}api/jobs/${jobId}/console_output?stdout_position=${stdout_position}&stdout_length=${stdout_length}` +
-        `&stderr_position=${stderr_position}&stderr_length=${stderr_length}`;
     try {
-        const { status, data } = await axios.get(url, {
-            validateStatus: function (status) {
-                return status == 200 || status == 403;
+        const { data, response, error } = await GalaxyApi().GET("/api/jobs/{job_id}/console_output", {
+            params: {
+                path: { job_id: jobId },
+                query: { stdout_position, stdout_length, stderr_position, stderr_length },
             },
         });
-        if (status == 403) {
-            if (data.err_code == 403004) {
+        if (error) {
+            if (response.status === 403 && error.err_code == 403004) {
                 console.log("This job destination does not support console output");
                 return { state: "ok" };
             }
@@ -50,19 +47,16 @@ export const JobConsoleOutputProvider = SingleQueryProvider(jobConsoleOutput, st
 
 export function jobsProvider(ctx, callback, extraParams = {}) {
     const { root, ...requestParams } = ctx;
-    const apiUrl = `${root}api/jobs`;
     const cleanParams = cleanPaginationParameters(requestParams);
-    const promise = axios.get(apiUrl, {
-        params: { ...cleanParams, ...extraParams },
-        paramsSerializer: { indexes: null },
+    const promise = GalaxyApi().GET("/api/jobs", {
+        params: { query: { ...cleanParams, ...extraParams } },
     });
 
     // Must return a promise that resolves to an array of items
-    return promise.then((data) => {
+    return promise.then(({ data, response }) => {
         // Pluck the array of items off our axios response
-        const items = data.data;
-        callback && callback(data);
+        callback && callback({ data, response });
         // Must return an array of items or an empty array if an error occurred
-        return items || [];
+        return data || [];
     });
 }

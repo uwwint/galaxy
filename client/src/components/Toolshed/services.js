@@ -1,27 +1,29 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { getGalaxyInstance } from "@/app";
-import { getAppRoot } from "@/onload/loadConfig";
 import { rethrowSimple } from "@/utils/simple-error";
 
 /** Request repositories, categories etc from toolshed server **/
 export class Services {
     async getCategories(toolshedUrl) {
-        const paramsString = `tool_shed_url=${toolshedUrl}&controller=categories`;
-        const url = `${getAppRoot()}api/tool_shed/request?${paramsString}`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/tool_shed/request", {
+                params: {
+                    query: { tool_shed_url: toolshedUrl, controller: "categories" },
+                },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
     async getRepositories(params) {
         const paramsString = this._getParamsString(params);
-        const url = `${getAppRoot()}api/tool_shed/request?controller=repositories&${paramsString}`;
         try {
-            const response = await axios.get(url);
-            const data = response.data;
+            const { data } = await GalaxyApi().GET("/api/tool_shed/request", {
+                params: {
+                    query: { controller: "repositories", ...params },
+                },
+            });
             const incoming = data.hits.map((x) => x.repository);
             incoming.forEach((x) => {
                 x.owner = x.repo_owner_username;
@@ -34,11 +36,12 @@ export class Services {
         }
     }
     async getRepository(toolshedUrl, repositoryId) {
-        const paramsString = `tool_shed_url=${toolshedUrl}&id=${repositoryId}&controller=repositories&action=metadata`;
-        const url = `${getAppRoot()}api/tool_shed/request?${paramsString}`;
         try {
-            const response = await axios.get(url);
-            const data = response.data;
+            const { data } = await GalaxyApi().GET("/api/tool_shed/request", {
+                params: {
+                    query: { tool_shed_url: toolshedUrl, id: repositoryId, controller: "repositories", action: "metadata" },
+                },
+            });
             const table = Object.keys(data).map((key) => data[key]);
             if (table.length === 0) {
                 throw Error("Repository does not contain any installable revisions.");
@@ -58,13 +61,15 @@ export class Services {
         }
     }
     async getRepositoryByName(toolshedUrl, repositoryName, repositoryOwner) {
-        const params = `tool_shed_url=${toolshedUrl}&name=${repositoryName}&owner=${repositoryOwner}`;
-        const url = `${getAppRoot()}api/tool_shed/request?controller=repositories&${params}`;
         try {
-            const response = await axios.get(url);
-            const length = response.data.length;
+            const { data } = await GalaxyApi().GET("/api/tool_shed/request", {
+                params: {
+                    query: { tool_shed_url: toolshedUrl, name: repositoryName, owner: repositoryOwner, controller: "repositories" },
+                },
+            });
+            const length = data.length;
             if (length > 0) {
-                const result = response.data[0];
+                const result = data[0];
                 result.repository_url = `${toolshedUrl}repository?repository_id=${result.id}`;
                 return result;
             } else {
@@ -76,10 +81,11 @@ export class Services {
     }
     async getInstalledRepositories(options = {}) {
         const Galaxy = getGalaxyInstance();
-        const url = `${getAppRoot()}api/tool_shed_repositories/?uninstalled=False`;
         try {
-            const response = await axios.get(url);
-            const repositories = this._groupByNameOwnerToolshed(response.data, options.filter, options.selectLatest);
+            const { data } = await GalaxyApi().GET("/api/tool_shed_repositories", {
+                params: { query: { uninstalled: false } },
+            });
+            const repositories = this._groupByNameOwnerToolshed(data, options.filter, options.selectLatest);
             this._fixToolshedUrls(repositories, Galaxy.config.tool_shed_urls);
             return repositories;
         } catch (e) {
@@ -87,11 +93,10 @@ export class Services {
         }
     }
     async getInstalledRepositoriesByName(repositoryName, repositoryOwner) {
-        const paramsString = `name=${repositoryName}&owner=${repositoryOwner}`;
-        const url = `${getAppRoot()}api/tool_shed_repositories?${paramsString}`;
         try {
-            const response = await axios.get(url);
-            const data = response.data;
+            const { data } = await GalaxyApi().GET("/api/tool_shed_repositories", {
+                params: { query: { name: repositoryName, owner: repositoryOwner } },
+            });
             const result = {};
             data.forEach((x) => {
                 const d = {
@@ -106,22 +111,21 @@ export class Services {
         }
     }
     async installRepository(payload) {
-        const url = `${getAppRoot()}api/tool_shed_repositories`;
         try {
-            const response = await axios.post(url, payload);
-            return response.data;
+            const { data } = await GalaxyApi().POST("/api/tool_shed_repositories", {
+                body: payload,
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
     async uninstallRepository(params) {
-        const paramsString = Object.keys(params).reduce(function (previous, key) {
-            return `${previous}${key}=${params[key]}&`;
-        }, "");
-        const url = `${getAppRoot()}api/tool_shed_repositories?${paramsString}`;
         try {
-            const response = await axios.delete(url);
-            return response.data;
+            const { data } = await GalaxyApi().DELETE("/api/tool_shed_repositories", {
+                params: { query: params },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }

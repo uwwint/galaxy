@@ -82,10 +82,9 @@
 <script>
 import { faInfoCircle, faRedo } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BBreadcrumb, BCard, BCol, BContainer, BRow } from "bootstrap-vue";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 import Alert from "@/components/Alert.vue";
 import GButton from "@/components/BaseComponents/GButton.vue";
@@ -162,8 +161,10 @@ export default {
         },
     },
     created() {
-        axios
-            .get(`${getAppRoot()}data_manager/job_info?id=${this.id}`)
+        GalaxyApi()
+            .GET("/data_manager/job_info", {
+                params: { query: { id: this.id } },
+            })
             .then((response) => {
                 this.jobId = response.data.jobId;
                 this.exitCode = response.data.exitCode;

@@ -1,6 +1,4 @@
-import axios from "axios";
-
-import { withPrefix } from "@/utils/redirect";
+import { GalaxyApi } from "@/api";
 import { rethrowSimple } from "@/utils/simple-error";
 
 /**
@@ -16,7 +14,10 @@ export interface DatatypeVisualization {
  */
 export async function fetchDatatypeVisualizations(): Promise<DatatypeVisualization[]> {
     try {
-        const { data } = await axios.get(withPrefix("/api/datatypes/visualizations"));
+        const { data, error } = await GalaxyApi().GET("/api/datatypes/visualizations");
+        if (error) {
+            throw error;
+        }
         return data;
     } catch (error) {
         rethrowSimple(error);
@@ -28,8 +29,15 @@ export async function fetchDatatypeVisualizations(): Promise<DatatypeVisualizati
  */
 export async function getPreferredVisualization(datatype: string): Promise<DatatypeVisualization | null> {
     try {
-        const url = withPrefix(`/api/datatypes/${datatype}/visualizations`);
-        const { data } = await axios.get(url);
+        const { data, error, response } = await GalaxyApi().GET("/api/datatypes/{datatype}/visualizations", {
+            params: { path: { datatype } },
+        });
+        if (error) {
+            if (response?.status === 404) {
+                return null;
+            }
+            throw error;
+        }
 
         // If the API returns an array with one item, return that item
         if (Array.isArray(data) && data.length === 1) {
@@ -38,10 +46,6 @@ export async function getPreferredVisualization(datatype: string): Promise<Datat
 
         return data;
     } catch (error) {
-        // Return null if no preferred visualization is found
-        if (axios.isAxiosError(error) && error.response?.status === 404) {
-            return null;
-        }
         rethrowSimple(error);
     }
 }

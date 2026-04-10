@@ -22,12 +22,11 @@
 </template>
 
 <script>
-import axios from "axios";
 import BootstrapVue from "bootstrap-vue";
 import Vue from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { waitOnJob } from "@/components/JobStates/wait";
-import { getAppRoot } from "@/onload/loadConfig";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import ExportForm from "@/components/Common/ExportForm.vue";
@@ -63,9 +62,11 @@ export default {
                 file_name: name,
             };
             this.waitingOnJob = true;
-            const url = `${getAppRoot()}api/histories/${this.historyId}/exports`;
-            axios
-                .put(url, data)
+            GalaxyApi()
+                .PUT("/api/histories/{history_id}/exports", {
+                    params: { path: { history_id: this.historyId } },
+                    body: data,
+                })
                 .then((response) => {
                     waitOnJob(response.data.job_id)
                         .then((data) => {

@@ -1,7 +1,5 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { Toast } from "@/composables/toast";
-import { getAppRoot } from "@/onload/loadConfig";
 import _l from "@/utils/localization";
 import Modal from "@/utils/modal";
 
@@ -61,12 +59,12 @@ export function deleteSelectedItems(checkedRows, onRemove, refreshTable, refresh
         var items_to_delete = [];
         for (let i = dataset_ids.length - 1; i >= 0; i--) {
             items_to_delete.push({
-                url: `${getAppRoot()}api/libraries/datasets/${dataset_ids[i]}`,
+                url: `/api/libraries/datasets/${dataset_ids[i]}`,
             });
         }
         for (let i = folder_ids.length - 1; i >= 0; i--) {
             items_to_delete.push({
-                url: `${getAppRoot()}api/folders/${folder_ids[i]}`,
+                url: `/api/folders/${folder_ids[i]}`,
             });
         }
 
@@ -102,7 +100,7 @@ function chainCallDeletingItems(items_to_delete, onRemove, refreshTable, refresh
         modal.hide();
         return;
     }
-    const deletePromise = axios.delete(item_to_delete.url);
+    const deletePromise = GalaxyApi().DELETE(item_to_delete.url);
     refreshTable();
     deletePromise
         .then(({ data }) => {

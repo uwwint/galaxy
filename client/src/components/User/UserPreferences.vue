@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BAlert } from "bootstrap-vue";
 import {
     faBell,
@@ -30,7 +29,6 @@ import { useObjectStoreTemplatesStore } from "@/stores/objectStoreTemplatesStore
 import localize from "@/utils/localization";
 import { userLogoutAll } from "@/utils/logout";
 import QueryStringParsing from "@/utils/query-string-parsing";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import GLink from "../BaseComponents/GLink.vue";
@@ -115,7 +113,12 @@ async function makeDataPrivate() {
     );
     if (confirmed) {
         try {
-            await axios.post(withPrefix(`/history/make_private?all_histories=true`));
+            const { error } = await GalaxyApi().POST("/history/make_private" as never, {
+                params: { query: { all_histories: true } },
+            });
+            if (error) {
+                throw error;
+            }
             showDataPrivateModal.value = true;
         } catch (error) {
             Toast.error(errorMessageAsString(error), "Error making data private");

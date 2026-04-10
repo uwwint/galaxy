@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BAlert } from "bootstrap-vue";
 import Vue, { computed, type Ref, ref, watch } from "vue";
 
-import { GalaxyApi, type MessageException } from "@/api";
+import { GalaxyApi, type MessageException } from "@/api/client";
 import { fetchCollectionSummary } from "@/api/datasetCollections";
 import type { TableField } from "@/components/Common/GTable.types";
 import { useToast } from "@/composables/toast";
@@ -11,7 +10,6 @@ import { useDatasetStore } from "@/stores/datasetStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useWorkflowStore } from "@/stores/workflowStore";
 import _l from "@/utils/localization";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import {
@@ -262,8 +260,10 @@ function initHistoryDatasetData() {
     for (const historyDatasetId of referencedHistoryDatasetIds.value) {
         fetchDataset({ id: historyDatasetId });
         if (historyDatasetId && !(historyDatasetId in historyDatasetAccessible.value)) {
-            axios
-                .get(withPrefix(`/dataset/get_edit?dataset_id=${historyDatasetId}`))
+            GalaxyApi()
+                .GET("/dataset/get_edit", {
+                    params: { query: { dataset_id: historyDatasetId } },
+                })
                 .then((response) => {
                     const permissionDisable = response.data.permission_disable;
                     const permissionInputs = response.data.permission_inputs;

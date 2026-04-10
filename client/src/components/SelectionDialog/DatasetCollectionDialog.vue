@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import axios from "axios";
 import { onMounted, ref } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import type { SelectionItem } from "@/components/SelectionDialog/selectionTypes";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import SelectionDialog from "@/components/SelectionDialog/SelectionDialog.vue";
@@ -52,11 +51,15 @@ function onCancel() {
 /** Performs server request to retrieve data records **/
 function load() {
     optionsShow.value = false;
-    const url = withPrefix(`/api/histories/${props.history}/contents?type=dataset_collection`);
-    axios
-        .get(url)
-        .then((response) => {
-            let collection_instances = response.data.sort((a: HistoryItem, b: HistoryItem) => b.hid - a.hid);
+    GalaxyApi()
+        .GET("/api/histories/{history_id}/contents", {
+            params: {
+                path: { history_id: props.history },
+                query: { type: "dataset_collection" },
+            },
+        })
+        .then(({ data }) => {
+            let collection_instances = data.sort((a: HistoryItem, b: HistoryItem) => b.hid - a.hid);
             if (props.collectionTypes?.length) {
                 collection_instances = collection_instances.filter(
                     (item: HistoryItem) =>

@@ -93,13 +93,12 @@
 import { faExternalLinkAlt, faFolderOpen, faUpload } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { refDebounced } from "@vueuse/core";
-import axios from "axios";
 import BootstrapVue from "bootstrap-vue";
 import Vue, { ref, watch } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { fetchFileSources } from "@/api/remoteFiles";
 import { waitOnJob } from "@/components/JobStates/wait";
-import { getAppRoot } from "@/onload/loadConfig";
 import { errorMessageAsString } from "@/utils/simple-error";
 import { capitalizeFirstLetter } from "@/utils/strings";
 
@@ -226,8 +225,10 @@ export default {
             if (this.importTarget == "newHistory") {
                 formData.append("name", "History for Workflow Import");
             }
-            axios
-                .post(`${getAppRoot()}api/histories`, formData)
+            GalaxyApi()
+                .POST("/api/histories", {
+                    body: formData,
+                })
                 .then((response) => {
                     this.waitingOnJob = true;
                     this.jobId = response.data.id;

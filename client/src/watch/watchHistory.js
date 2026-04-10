@@ -25,12 +25,12 @@ let lastUpdateTime = null;
 // last time changed history items have been requested
 let lastRequestDate = new Date();
 
-export async function watchHistory(app) {
+export async function watchHistory() {
     // GalaxyApp
     const { isWatching } = storeToRefs(useHistoryItemsStore());
     try {
         isWatching.value = true;
-        await watchHistoryOnce(app);
+        await watchHistoryOnce();
     } catch (error) {
         // error alerting the user that watch history failed
         console.warn(error);
@@ -38,7 +38,7 @@ export async function watchHistory(app) {
     }
 }
 
-export async function watchHistoryOnce(app) {
+export async function watchHistoryOnce() {
     const historyStore = useHistoryStore();
     const historyItemsStore = useHistoryItemsStore();
     const datasetStore = useDatasetStore();
@@ -82,10 +82,6 @@ export async function watchHistoryOnce(app) {
         datasetStore.saveDatasets(payload);
         historyItemsStore.saveHistoryItems(historyId, payload);
         collectionElementsStore.saveCollections(payload);
-        // trigger changes in legacy handler
-        if (app) {
-            app.user.loadFromApi(app.user.id || "current");
-        }
     }
 }
 

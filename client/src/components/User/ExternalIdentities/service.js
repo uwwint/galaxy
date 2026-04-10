@@ -1,20 +1,16 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
-
-const getUrl = (path) => getAppRoot() + path;
+import { GalaxyApi } from "@/api";
 
 export async function disconnectIdentity(doomed) {
     if (doomed) {
-        let url;
+        let path;
         if (doomed.provider === "cilogon") {
-            url = getUrl(`authnz/${doomed.provider}/disconnect/${doomed.email}`);
+            path = `/authnz/${doomed.provider}/disconnect/${doomed.email}`;
         } else {
-            url = getUrl(`authnz/${doomed.provider}/disconnect/`);
+            path = `/authnz/${doomed.provider}/disconnect/`;
         }
 
-        const response = await axios.delete(url);
-        if (response.status != 200) {
+        const { response, error } = await GalaxyApi().DELETE(path);
+        if (error || response.status != 200) {
             throw new Error("Delete failure.");
         }
     }
@@ -24,19 +20,17 @@ export async function disconnectIdentity(doomed) {
 let identityProviders;
 
 export async function getIdentityProviders() {
-    const url = getUrl("authnz");
-    const response = await axios.get(url);
-    if (response.status != 200) {
+    const { data, error, response } = await GalaxyApi().GET("/authnz");
+    if (error || response.status != 200) {
         throw new Error("Unable to load connected external identities");
     }
-    identityProviders = response.data;
+    identityProviders = data;
     return identityProviders;
 }
 
 export async function saveIdentity(idp) {
-    const url = getUrl(`authnz/${idp}/login`);
-    const response = await axios.post(url);
-    if (response.status != 200) {
+    const { response, error } = await GalaxyApi().POST(`/authnz/${idp}/login`);
+    if (error || response.status != 200) {
         throw new Error("Save failure.");
     }
     return response;
@@ -49,12 +43,11 @@ export async function hasUsername() {
 }
 
 export async function getCurrentUser() {
-    const url = getUrl("api/users/current");
-    const response = await axios.get(url);
-    if (response.status != 200) {
-        throw new Error(response);
+    const { data, error } = await GalaxyApi().GET("/api/users/current");
+    if (error) {
+        throw error;
     }
-    return response.data;
+    return data;
 }
 
 export default {

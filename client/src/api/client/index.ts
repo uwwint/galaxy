@@ -3,7 +3,7 @@ import { getActivePinia } from "pinia";
 
 import { createRateLimiterMiddleware } from "@/api/client/rateLimiter";
 import type { GalaxyApiPaths } from "@/api/schema";
-import { getAppRoot } from "@/onload/loadConfig";
+import { getAppRoot } from "@/onload/appRoot";
 import { useAuthStore } from "@/stores/authStore";
 
 function getBaseUrl() {

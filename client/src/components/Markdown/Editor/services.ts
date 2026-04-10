@@ -1,5 +1,4 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api";
 import { getAppRoot } from "@/onload";
 import { rethrowSimple } from "@/utils/simple-error";
 
@@ -14,7 +13,12 @@ export interface VisualizationType {
 
 export async function getVisualizations(): Promise<Array<TemplateEntry>> {
     try {
-        const { data } = await axios.get(`${getAppRoot()}api/plugins?embeddable=True`);
+        const { data, error } = await GalaxyApi().GET("/api/plugins", {
+            params: { query: { embeddable: true } },
+        });
+        if (error) {
+            throw error;
+        }
         return data.map((v: VisualizationType) => ({
             title: v.html,
             description: v.description || "",

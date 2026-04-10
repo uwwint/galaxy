@@ -105,9 +105,7 @@
 </template>
 
 <script>
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 import Message from "../Message.vue";
 import BaseGrid from "./BaseGrid.vue";
@@ -147,8 +145,8 @@ export default {
     },
 
     created() {
-        axios
-            .get(`${getAppRoot()}api/sanitize_allow`)
+        GalaxyApi()
+            .GET("/api/sanitize_allow")
             .then((response) => {
                 this.isLoaded = true;
                 this.localAllowed = response.data.allowed_local;
@@ -165,11 +163,9 @@ export default {
 
     methods: {
         allowHTML(tool_id) {
-            axios
-                .put(`${getAppRoot()}api/sanitize_allow?tool_id=${encodeURIComponent(tool_id)}`, {
-                    params: {
-                        tool_id: tool_id,
-                    },
+            GalaxyApi()
+                .PUT("/api/sanitize_allow", {
+                    params: { query: { tool_id } },
                 })
                 .then((response) => {
                     this.localAllowed = response.data.allowed_local;
@@ -184,11 +180,9 @@ export default {
                 });
         },
         sanitizeHTML(tool_id) {
-            axios
-                .delete(`${getAppRoot()}api/sanitize_allow`, {
-                    params: {
-                        tool_id: tool_id,
-                    },
+            GalaxyApi()
+                .DELETE("/api/sanitize_allow", {
+                    params: { query: { tool_id } },
                 })
                 .then((response) => {
                     this.localAllowed = response.data.allowed_local;

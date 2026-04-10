@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { faCheck, faExclamationTriangle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { computed, ref } from "vue";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api";
 import { useHistoryStore } from "@/stores/historyStore";
 //@ts-ignore
 import { errorMessageAsString } from "@/utils/simple-error";
@@ -25,7 +24,12 @@ const showLink = computed(() => !imported.value && !error.value);
 
 const onImport = async () => {
     try {
-        await axios.post(`${getAppRoot()}api/histories`, { history_id: props.historyId });
+        const { error } = await GalaxyApi().POST("/api/histories", {
+            body: { history_id: props.historyId },
+        });
+        if (error) {
+            throw error;
+        }
         imported.value = true;
     } catch (e) {
         error.value = errorMessageAsString(e);

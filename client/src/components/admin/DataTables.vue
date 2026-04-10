@@ -13,9 +13,7 @@
 </template>
 
 <script>
-import axios from "axios";
-
-import { GalaxyApi } from "@/api";
+import { GalaxyApi } from "@/api/client";
 import { getAppRoot } from "@/onload/loadConfig";
 
 import Message from "../Message.vue";
@@ -63,8 +61,8 @@ export default {
     },
 
     created() {
-        axios
-            .get(`${getAppRoot()}admin/data_tables_list`)
+        GalaxyApi()
+            .GET("/admin/data_tables_list")
             .then((response) => {
                 this.isLoaded = true;
                 this.dataTables = response.data.data;

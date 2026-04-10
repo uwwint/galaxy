@@ -606,17 +606,16 @@
 
 <script>
 import HotTable from "@handsontable/vue";
-import axios from "axios";
 import BootstrapVue from "bootstrap-vue";
 import { escape } from "lodash";
 import { mapActions } from "pinia";
 import Vue from "vue";
 
+import { GalaxyApi } from "@/api";
 import { ERROR_STATES, NON_TERMINAL_STATES } from "@/api/jobs";
 import { fetchDatasetsToJobId, fetchJobErrorMessage } from "@/api/tools";
 import RuleDefs from "@/components/RuleBuilder/rule-definitions";
 import UploadUtils from "@/components/Upload/utils";
-import { getAppRoot } from "@/onload/loadConfig";
 import { useHistoryStore } from "@/stores/historyStore";
 import _l from "@/utils/localization";
 import { errorMessageAsString } from "@/utils/simple-error";
@@ -1471,7 +1470,12 @@ export default {
                 }
             };
             const doJobCheck = () => {
-                axios.get(`${getAppRoot()}api/jobs/${jobId}`).then(handleJobShow).catch(this.renderFetchError);
+                GalaxyApi()
+                    .GET("/api/jobs/{job_id}", {
+                        params: { path: { job_id: jobId } },
+                    })
+                    .then(handleJobShow)
+                    .catch(this.renderFetchError);
             };
             setTimeout(doJobCheck, 1000);
         },
@@ -1482,7 +1486,12 @@ export default {
                     this.errorMessage = errorMessage;
                 }
             };
-            axios.get(`${getAppRoot()}api/jobs/${jobId}?full=True`).then(handleJobShow).catch(this.renderFetchError);
+            GalaxyApi()
+                .GET("/api/jobs/{job_id}", {
+                    params: { path: { job_id: jobId }, query: { full: true } },
+                })
+                .then(handleJobShow)
+                .catch(this.renderFetchError);
         },
         renderFetchError(error) {
             this.state = "error";

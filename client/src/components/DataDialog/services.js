@@ -1,13 +1,11 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 /** Data populator traverses raw server responses **/
 export class Services {
     get(url) {
         return new Promise((resolve, reject) => {
-            axios
-                .get(url)
+            GalaxyApi()
+                .GET(url)
                 .then((response) => {
                     const items = this.getItems(response.data);
                     resolve(items);

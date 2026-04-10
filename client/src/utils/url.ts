@@ -1,5 +1,6 @@
 import axios from "axios";
 
+import { GalaxyApi } from "@/api";
 import { withPrefix } from "@/utils/redirect";
 import { rethrowSimple } from "@/utils/simple-error";
 
@@ -41,6 +42,16 @@ export async function urlData<R>({ url, headers, params, errorSimplify = true }:
     try {
         headers = headers || {};
         params = params || {};
+        if (url.startsWith("/api/") || url === "/context" || url.startsWith("/ga4gh/") || url.startsWith("/.well-known/")) {
+            const { data, error } = await GalaxyApi().GET(url as never, {
+                ...(Object.keys(params).length ? { params: { query: params } } : {}),
+                ...(Object.keys(headers).length ? { headers } : {}),
+            });
+            if (error) {
+                throw error;
+            }
+            return data as R;
+        }
         const { data } = await axios.get(withPrefix(url), { headers, params });
         return data as R;
     } catch (e) {

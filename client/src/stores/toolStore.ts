@@ -2,10 +2,10 @@
  * Requests tools, and various panel views
  */
 
-import axios, { type AxiosResponse } from "axios";
 import { defineStore } from "pinia";
 import Vue, { computed, type Ref, ref, shallowRef } from "vue";
 
+import { GalaxyApi } from "@/api";
 import {
     MY_PANEL_VIEW_DESCRIPTION,
     MY_PANEL_VIEW_ID,
@@ -222,7 +222,12 @@ export const useToolStore = defineStore("toolStore", () => {
         }
         try {
             loading.value = true;
-            const { data } = await axios.get(`${getAppRoot()}api/tool_panels/${panelView}`);
+            const { data, error } = await GalaxyApi().GET("/api/tool_panels/{panel_view}" as never, {
+                params: { path: { panel_view: panelView } },
+            });
+            if (error) {
+                throw error;
+            }
             saveToolSections(panelView, data);
         } catch (e) {
             rethrowSimple(e);
@@ -234,7 +239,10 @@ export const useToolStore = defineStore("toolStore", () => {
     async function fetchPanels() {
         try {
             if (!defaultPanelView.value || Object.keys(panels.value).length === 0) {
-                const { data } = await axios.get(`${getAppRoot()}api/tool_panels`);
+                const { data, error } = await GalaxyApi().GET("/api/tool_panels" as never);
+                if (error) {
+                    throw error;
+                }
                 defaultPanelView.value = data.default_panel_view;
                 panels.value = {
                     ...data.views,
@@ -248,7 +256,12 @@ export const useToolStore = defineStore("toolStore", () => {
 
     async function fetchToolForId(toolId: string) {
         try {
-            const { data } = await axios.get(`${getAppRoot()}api/tools/${toolId}`);
+            const { data, error } = await GalaxyApi().GET("/api/tools/{tool_id}" as never, {
+                params: { path: { tool_id: toolId } },
+            });
+            if (error) {
+                throw error;
+            }
             saveToolForId(toolId, data);
         } catch (e) {
             rethrowSimple(e);
@@ -263,14 +276,24 @@ export const useToolStore = defineStore("toolStore", () => {
                 // We have either cached the backend search result,
                 // or it is a favorites search (which we always repeat for changes)
                 if (!toolResults.value[q] || FAVORITES_KEYS.includes(q.trim())) {
-                    const { data } = await axios.get(`${getAppRoot()}api/tools`, { params: { q } });
+                    const { data, error } = await GalaxyApi().GET("/api/tools", {
+                        params: { query: { q } },
+                    });
+                    if (error) {
+                        throw error;
+                    }
                     saveToolResults(q, data);
                 }
             }
 
             // Fetch all tools by IDs if not already fetched
             if (Object.keys(toolsById.value).length === 0) {
-                const { data } = await axios.get(`${getAppRoot()}api/tools?in_panel=False`);
+                const { data, error } = await GalaxyApi().GET("/api/tools", {
+                    params: { query: { in_panel: false } },
+                });
+                if (error) {
+                    throw error;
+                }
                 saveAllTools(data as Tool[]);
             }
         } catch (e) {
@@ -289,14 +312,17 @@ export const useToolStore = defineStore("toolStore", () => {
             return existing;
         }
         const promise = (async () => {
-            try {
-                const toolHelpData: ToolHelpData = {};
+                try {
+                    const toolHelpData: ToolHelpData = {};
 
-                const { data } = (await axios.get(
-                    `${getAppRoot()}api/tools/${encodeURIComponent(toolId)}/build`,
-                )) as AxiosResponse<ToolHelpData>;
+                    const { data, error } = await GalaxyApi().GET("/api/tools/{tool_id}/build" as never, {
+                        params: { path: { tool_id: encodeURIComponent(toolId) } },
+                    });
+                    if (error) {
+                        throw error;
+                    }
 
-                const help = data.help;
+                    const help = data.help;
                 if (help && help !== "\n") {
                     toolHelpData.help = help;
                     toolHelpData.summary = parseHelpForSummary(help);

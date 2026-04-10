@@ -69,11 +69,10 @@
 <script>
 import { faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BAlert, BButton, BModal } from "bootstrap-vue";
 
+import { GalaxyApi } from "@/api/client";
 import { buildFields } from "@/components/Libraries/library-utils";
-import { getAppRoot } from "@/onload/loadConfig";
 import _l from "@/utils/localization";
 
 import GTable from "@/components/Common/GTable.vue";
@@ -150,9 +149,10 @@ export default {
         async retrieveLibraryDetails() {
             try {
                 this.error = null;
-                const url = `${getAppRoot()}api/libraries/${this.metadata.parent_library_id}`;
-                const response = await axios.get(url);
-                return buildFields(this.libraryFieldTitles, response.data);
+                const { data } = await GalaxyApi().GET("/api/libraries/{library_id}", {
+                    params: { path: { library_id: this.metadata.parent_library_id } },
+                });
+                return buildFields(this.libraryFieldTitles, data);
             } catch (e) {
                 this.error = `${_l("Failed to retrieve library details.")} ${e}`;
                 return null;

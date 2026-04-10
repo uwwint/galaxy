@@ -1,9 +1,7 @@
 /**
  * Service layer for interaction for the workflow run API.
  */
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api";
 import { rethrowSimple } from "@/utils/simple-error";
 
 /**
@@ -14,13 +12,17 @@ import { rethrowSimple } from "@/utils/simple-error";
  * @param {String} version - Version of the workflow to fetch.
  */
 export async function getRunData(workflowId, version = null, instance = false) {
-    let url = `${getAppRoot()}api/workflows/${workflowId}/download?style=run&instance=${instance}`;
-    if (version) {
-        url += `&version=${version}`;
-    }
     try {
-        const response = await axios.get(url);
-        return response.data;
+        const { data, error } = await GalaxyApi().GET("/api/workflows/{workflow_id}/download", {
+            params: {
+                path: { workflow_id: workflowId },
+                query: { style: "run", instance, ...(version ? { version } : {}) },
+            },
+        });
+        if (error) {
+            throw error;
+        }
+        return data;
     } catch (e) {
         rethrowSimple(e);
     }
@@ -32,9 +34,14 @@ export async function getRunData(workflowId, version = null, instance = false) {
  * @param {String} workflowId - (Stored?) Workflow ID to fetch data for.
  */
 export async function invokeWorkflow(workflowId, invocationData) {
-    const url = `${getAppRoot()}api/workflows/${workflowId}/invocations`;
-    const response = await axios.post(url, invocationData);
-    return response.data;
+    const { data, error } = await GalaxyApi().POST("/api/workflows/{workflow_id}/invocations", {
+        params: { path: { workflow_id: workflowId } },
+        body: invocationData,
+    });
+    if (error) {
+        throw error;
+    }
+    return data;
 }
 
 /**
@@ -53,7 +60,13 @@ export async function getTool(toolId, toolVersion, toolInputs, historyId) {
         history_id: historyId,
     };
     try {
-        const { data } = await axios.post(`${getAppRoot()}api/tools/${toolId}/build`, requestData);
+        const { data, error } = await GalaxyApi().POST("/api/tools/{tool_id}/build", {
+            params: { path: { tool_id: toolId } },
+            body: requestData,
+        });
+        if (error) {
+            throw error;
+        }
         return data;
     } catch (e) {
         rethrowSimple(e);

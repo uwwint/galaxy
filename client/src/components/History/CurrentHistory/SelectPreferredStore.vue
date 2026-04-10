@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BModal, type BvModalEvent } from "bootstrap-vue";
 import { computed, type PropType, ref } from "vue";
 
+import { GalaxyApi } from "@/api";
 import { getPermissions, isHistoryPrivate, makePrivate, type PermissionsResponse } from "@/components/History/services";
 import { useConfirmDialog } from "@/composables/confirmDialog";
 import { useStorageLocationConfiguration } from "@/composables/storageLocation";
-import { prependPath } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import SelectObjectStore from "@/components/ObjectStore/SelectObjectStore.vue";
@@ -94,9 +93,14 @@ async function handleSubmit(preferredObjectStoreId: string | null, isPrivate: bo
     }
 
     const payload = { preferred_object_store_id: preferredObjectStoreId };
-    const url = prependPath(`api/histories/${props.history.id}`);
     try {
-        await axios.put(url, payload);
+        const { error } = await GalaxyApi().PUT("/api/histories/{history_id}", {
+            params: { path: { history_id: props.history.id } },
+            body: payload,
+        });
+        if (error) {
+            throw error;
+        }
         emit("updated", preferredObjectStoreId);
     } catch (e) {
         error.value = errorMessageAsString(e);

@@ -1,8 +1,5 @@
-import axios from "axios";
-
-import { GalaxyApi } from "@/api";
+import { GalaxyApi } from "@/api/client";
 import { pollUntil } from "@/composables/pollUntil";
-import { getAppRoot } from "@/onload/loadConfig";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export async function updateToolFormData(tool_id, tool_uuid, tool_version, history_id, inputs) {
@@ -13,9 +10,11 @@ export async function updateToolFormData(tool_id, tool_uuid, tool_version, histo
         inputs: inputs,
         history_id: history_id,
     };
-    const url = `${getAppRoot()}api/tools/${tool_id || tool_uuid}/build`;
     try {
-        const { data } = await axios.post(url, current_state);
+        const { data } = await GalaxyApi().POST("/api/tools/{tool_id}/build", {
+            params: { path: { tool_id: tool_id || tool_uuid } },
+            body: current_state,
+        });
         return data;
     } catch (e) {
         rethrowSimple(e);
@@ -25,34 +24,34 @@ export async function updateToolFormData(tool_id, tool_uuid, tool_version, histo
 /** Tools data request helper **/
 export async function getToolFormData(tool_id, tool_version, job_id, history_id, tool_uuid) {
     let url = "";
-    const data = {};
+    const requestData = {};
 
     // build request url and collect request data
     if (job_id) {
-        url = `${getAppRoot()}api/jobs/${job_id}/build_for_rerun`;
+        url = `/api/jobs/${job_id}/build_for_rerun`;
     } else {
-        url = `${getAppRoot()}api/tools/${tool_id}/build`;
+        url = `/api/tools/${tool_id}/build`;
         const queryString = window.location.search;
         const params = new URLSearchParams(queryString);
         for (const [key, value] of params.entries()) {
             if (key != "tool_id") {
-                data[key] = value;
+                requestData[key] = value;
             }
         }
     }
-    history_id && (data["history_id"] = history_id);
-    tool_version && (data["tool_version"] = tool_version);
-    tool_uuid && (data["tool_uuid"] = tool_uuid);
+    history_id && (requestData["history_id"] = history_id);
+    tool_version && (requestData["tool_version"] = tool_version);
+    tool_uuid && (requestData["tool_uuid"] = tool_uuid);
 
     // attach data to request url
-    if (Object.entries(data).length != 0) {
-        const params = new URLSearchParams(data);
+    if (Object.entries(requestData).length != 0) {
+        const params = new URLSearchParams(requestData);
         url = `${url}?${params.toString()}`;
     }
 
     // request tool data
     try {
-        const { data } = await axios.get(url);
+        const { data } = await GalaxyApi().GET(url);
         return data;
     } catch (e) {
         rethrowSimple(e);

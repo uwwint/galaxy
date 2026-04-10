@@ -18,9 +18,7 @@
 </template>
 
 <script>
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 import Message from "../Message.vue";
 import BaseGrid from "./BaseGrid.vue";
@@ -77,8 +75,8 @@ export default {
     },
 
     created() {
-        axios
-            .get(`${getAppRoot()}admin/data_types_list`)
+        GalaxyApi()
+            .GET("/admin/data_types_list")
             .then((response) => {
                 this.keys = response.data.keys;
                 this.dataTypes = response.data.data;

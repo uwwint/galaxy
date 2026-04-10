@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import axios from "axios";
 import { computed, ref, watch } from "vue";
 
-import { withPrefix } from "@/utils/redirect";
+import { GalaxyApi } from "@/api/client";
 import { isEmpty } from "@/utils/utils";
 
 import WorkflowTree from "./WorkflowTree.vue";
@@ -34,14 +33,14 @@ const itemContent = ref<ItemContent | null>(null);
 const loading = ref(true);
 
 const workflowName = computed(() => (itemContent.value ? itemContent.value.name : "..."));
-const downloadUrl = computed(() => withPrefix(`/api/workflows/${props.workflowId}/download?format=json-download`));
-const importUrl = computed(() => withPrefix(`/workflow/imp?id=${props.workflowId}`));
+const downloadUrl = computed(() => `/api/workflows/${props.workflowId}/download?format=json-download`);
+const importUrl = computed(() => `/workflow/imp?id=${props.workflowId}`);
 const itemUrl = computed(() => {
     let extra = "";
     if (props.workflowVersion) {
         extra = `&version=${props.workflowVersion}`;
     }
-    return withPrefix(`/api/workflows/${props.workflowId}/download?style=preview${extra}`);
+    return `/api/workflows/${props.workflowId}/download?style=preview${extra}`;
 });
 
 watch(
@@ -49,8 +48,8 @@ watch(
     () => {
         loading.value = true;
         if (props.workflowId) {
-            axios
-                .get(itemUrl.value)
+            GalaxyApi()
+                .GET(itemUrl.value)
                 .then((response) => {
                     errorContent.value = null;
                     itemContent.value = response.data;

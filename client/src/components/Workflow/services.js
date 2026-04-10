@@ -1,7 +1,5 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { useAuthStore } from "@/stores/authStore";
-import { withPrefix } from "@/utils/redirect";
 import { rethrowSimple } from "@/utils/simple-error";
 
 import { toSimple } from "./Editor/modules/model";
@@ -11,19 +9,19 @@ export class Services {
     async copyWorkflow(workflow) {
         const authStore = useAuthStore();
         const currentUsername = authStore.effectiveUser?.username;
-        const url = withPrefix(`/api/workflows/${workflow.id}/download`);
         try {
-            const response = await axios.get(url);
-            const newWorkflow = response.data;
+            const { data: newWorkflow } = await GalaxyApi().GET("/api/workflows/{workflow_id}/download", {
+                params: { path: { workflow_id: workflow.id } },
+            });
             const currentOwner = workflow.owner;
             let newName = `Copy of ${workflow.name}`;
             if (currentOwner != currentUsername) {
                 newName += ` shared by user ${currentOwner}`;
             }
             newWorkflow.name = newName;
-            const createUrl = withPrefix("/api/workflows");
-            const createResponse = await axios.post(createUrl, { workflow: newWorkflow });
-            const createWorkflow = createResponse.data;
+            const { data: createWorkflow } = await GalaxyApi().POST("/api/workflows", {
+                body: { workflow: newWorkflow },
+            });
             this._addAttributes(createWorkflow);
             return createWorkflow;
         } catch (e) {
@@ -32,9 +30,10 @@ export class Services {
     }
 
     async createWorkflow(workflow) {
-        const url = withPrefix("/api/workflows");
         try {
-            const { data } = await axios.post(url, { workflow: toSimple(workflow.id, workflow), from_tool_form: true });
+            const { data } = await GalaxyApi().POST("/api/workflows", {
+                body: { workflow: toSimple(workflow.id, workflow), from_tool_form: true },
+            });
             return data;
         } catch (e) {
             rethrowSimple(e);
@@ -42,30 +41,34 @@ export class Services {
     }
 
     async deleteWorkflow(id) {
-        const url = withPrefix(`/api/workflows/${id}`);
         try {
-            const response = await axios.delete(url);
-            return response.data;
+            const { data } = await GalaxyApi().DELETE("/api/workflows/{workflow_id}", {
+                params: { path: { workflow_id: id } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async undeleteWorkflow(id) {
-        const url = withPrefix(`/api/workflows/${id}/undelete`);
         try {
-            const response = await axios.post(url);
-            return response.data;
+            const { data } = await GalaxyApi().POST("/api/workflows/{workflow_id}/undelete", {
+                params: { path: { workflow_id: id } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
     }
 
     async updateWorkflow(id, data) {
-        const url = withPrefix(`/api/workflows/${id}`);
         try {
-            const response = await axios.put(url, data);
-            return response.data;
+            const { data: workflowData } = await GalaxyApi().PUT("/api/workflows/{workflow_id}", {
+                params: { path: { workflow_id: id } },
+                body: data,
+            });
+            return workflowData;
         } catch (e) {
             rethrowSimple(e);
         }
@@ -84,10 +87,9 @@ export class Services {
     }
 
     async getTrsServers() {
-        const url = withPrefix("/api/trs_consume/servers");
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/trs_consume/servers");
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
@@ -100,10 +102,14 @@ export class Services {
         // better than the alternatives IMO. -John
         // https://github.com/pallets/flask/issues/900
         toolId = btoa(toolId);
-        const url = withPrefix(`/api/trs_consume/${trsServer}/tools/${toolId}?tool_id_b64_encoded=true`);
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/trs_consume/{trs_server}/tools/{tool_id}", {
+                params: {
+                    path: { trs_server: trsServer, tool_id: toolId },
+                    query: { tool_id_b64_encoded: true },
+                },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }
@@ -116,10 +122,9 @@ export class Services {
             trs_tool_id: toolId,
             trs_version_id: versionId,
         };
-        const url = withPrefix("/api/workflows");
         try {
-            const response = await axios.post(url, data);
-            return response.data;
+            const { data: workflowData } = await GalaxyApi().POST("/api/workflows", { body: data });
+            return workflowData;
         } catch (e) {
             rethrowSimple(e);
         }
@@ -130,10 +135,9 @@ export class Services {
             archive_source: "trs_tool",
             trs_url: trsUrl,
         };
-        const url = withPrefix("/api/workflows");
         try {
-            const response = await axios.post(url, data);
-            return response.data;
+            const { data: workflowData } = await GalaxyApi().POST("/api/workflows", { body: data });
+            return workflowData;
         } catch (e) {
             rethrowSimple(e);
         }

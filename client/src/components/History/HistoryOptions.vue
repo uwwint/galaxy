@@ -15,15 +15,14 @@ import {
     faUsersCog,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import axios from "axios";
 import { BDropdown, BDropdownDivider, BDropdownItem, BDropdownText, BFormCheckbox } from "bootstrap-vue";
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router/composables";
 
+import { GalaxyApi } from "@/api/client";
 import { canMutateHistory, type HistorySummary } from "@/api";
 import { useToast } from "@/composables/toast";
-import { getAppRoot } from "@/onload/loadConfig";
 import { useHistoryStore } from "@/stores/historyStore";
 import { useUserStore } from "@/stores/userStore";
 import localize from "@/utils/localization";
@@ -85,10 +84,11 @@ function userTitle(title: string) {
 }
 
 async function resumePausedJobs() {
-    const url = `${getAppRoot()}history/resume_paused_jobs?current=True`;
     try {
-        const response = await axios.get(url);
-        toast.success(response.data.message);
+        const { data } = await GalaxyApi().GET("/history/resume_paused_jobs", {
+            params: { query: { current: true } },
+        });
+        toast.success(data.message);
     } catch (e) {
         rethrowSimple(e);
     }

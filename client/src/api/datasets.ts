@@ -1,5 +1,3 @@
-import axios from "axios";
-
 import {
     type components,
     type DatasetTextContentDetails,
@@ -154,8 +152,12 @@ export function getCompositeDatasetLink(historyDatasetId: string, path: string) 
 export type DatasetExtraFiles = components["schemas"]["DatasetExtraFiles"];
 
 export async function fetchDatasetAttributes(datasetId: string) {
-    const { data } = await axios.get(withPrefix(`/dataset/get_edit?dataset_id=${datasetId}`));
-
+    const { data, error } = await GalaxyApi().GET("/dataset/get_edit" as never, {
+        params: { query: { dataset_id: datasetId } },
+    });
+    if (error) {
+        rethrowSimple(error);
+    }
     return data;
 }
 

@@ -12,7 +12,6 @@ import {
 } from "@/api";
 import type { UpdateHistoryPayload } from "@/api/histories";
 import type { ArchivedHistoryDetailed } from "@/api/histories.archived";
-import { getGalaxyInstance } from "@/app";
 import { HistoryFilters } from "@/components/History/HistoryFilters";
 import { useResourceWatcher } from "@/composables/resourceWatcher";
 import { useUserLocalStorage } from "@/composables/userLocalStorage";
@@ -429,8 +428,7 @@ export const useHistoryStore = defineStore("historyStore", () => {
     }
 
     function watchHistory() {
-        const app = getGalaxyInstance();
-        return watchHistorySuppliedApp(app);
+        return watchHistorySuppliedApp();
     }
 
     const { startWatchingResource: startWatchingHistory, isWatchingResource: isWatchingHistory } = useResourceWatcher(

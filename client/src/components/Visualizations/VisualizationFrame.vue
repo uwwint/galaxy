@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BAlert } from "bootstrap-vue";
 import { debounce } from "lodash";
 import { onMounted, ref } from "vue";
@@ -30,9 +29,14 @@ const iframeRef = ref<HTMLIFrameElement | null>(null);
 
 async function render() {
     if (props.name) {
-        try {
-            const { data: plugin } = await axios.get(`${getAppRoot()}api/plugins/${props.name}`);
-            const pluginPath = plugin.href;
+    try {
+        const { data: plugin, error } = await GalaxyApi().GET("/api/plugins/{id}", {
+            params: { path: { id: props.name } },
+        });
+        if (error) {
+            throw error;
+        }
+        const pluginPath = plugin.href;
             const dataIncoming = {
                 root: window.location.origin + getAppRoot(),
                 visualization_config: props.config,

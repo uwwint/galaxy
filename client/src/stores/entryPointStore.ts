@@ -1,10 +1,9 @@
-import axios from "axios";
 import isEqual from "lodash.isequal";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { useResourceWatcher } from "@/composables/resourceWatcher";
-import { getAppRoot } from "@/onload/loadConfig";
 import { rethrowSimple } from "@/utils/simple-error";
 
 const ACTIVE_POLLING_INTERVAL = 10000;
@@ -40,11 +39,11 @@ export const useEntryPointStore = defineStore("entryPointStore", () => {
     });
 
     async function fetchEntryPoints() {
-        const url = `${getAppRoot()}api/entry_points`;
-        const params = { running: true };
         try {
-            const response = await axios.get(url, { params: params });
-            updateEntryPoints(response.data);
+            const { data } = await GalaxyApi().GET("/api/entry_points", {
+                params: { query: { running: true } },
+            });
+            updateEntryPoints(data);
         } catch (e) {
             rethrowSimple(e);
         }

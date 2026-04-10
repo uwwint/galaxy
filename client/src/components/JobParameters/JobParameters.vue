@@ -50,11 +50,10 @@
 </template>
 
 <script>
-import axios from "axios";
 import BootstrapVue from "bootstrap-vue";
 import Vue from "vue";
 
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 
 import Heading from "../Common/Heading.vue";
 import JobOutputs from "../JobInformation/JobOutputs.vue";
@@ -131,21 +130,16 @@ export default {
             return parameter.text == "request_json" && typeof parameter.value == "string";
         },
         initJob() {
-            let url;
             if (this.jobId) {
-                url = `${getAppRoot()}api/jobs/${this.jobId}/parameters_display`;
+                this.ajaxCall(`/api/jobs/${this.jobId}/parameters_display`);
             } else {
-                url = `${getAppRoot()}api/datasets/${this.datasetId}/parameters_display?hda_ldda=${this.datasetType}`;
+                this.ajaxCall(`/api/datasets/${this.datasetId}/parameters_display?hda_ldda=${this.datasetType}`);
             }
-            this.ajaxCall(url);
             this.isSingleParam = this.param !== undefined && this.param !== "undefined";
         },
-        appRoot: function () {
-            return getAppRoot();
-        },
         ajaxCall: function (url) {
-            axios
-                .get(url)
+            GalaxyApi()
+                .GET(url)
                 .then((response) => response.data)
                 .then((data) => {
                     this.hasParameterErrors = data.has_parameter_errors;

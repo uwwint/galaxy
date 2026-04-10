@@ -1,6 +1,4 @@
-import axios from "axios";
-
-import { withPrefix } from "@/utils/redirect";
+import { GalaxyApi } from "@/api";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export interface Dataset {
@@ -57,7 +55,12 @@ export interface TestType {
 export async function fetchPlugins(datasetId?: string): Promise<Array<Plugin>> {
     try {
         const query = datasetId ? `?dataset_id=${datasetId}` : "";
-        const { data } = await axios.get(withPrefix(`/api/plugins${query}`));
+        const { data, error } = await GalaxyApi().GET("/api/plugins", {
+            params: query ? { query: { dataset_id: datasetId } } : undefined,
+        });
+        if (error) {
+            throw error;
+        }
         return data;
     } catch (error) {
         rethrowSimple(error);
@@ -66,7 +69,12 @@ export async function fetchPlugins(datasetId?: string): Promise<Array<Plugin>> {
 
 export async function fetchPlugin(id: string): Promise<Plugin> {
     try {
-        const { data } = await axios.get(withPrefix(`/api/plugins/${id}`));
+        const { data, error } = await GalaxyApi().GET("/api/plugins/{id}", {
+            params: { path: { id } },
+        });
+        if (error) {
+            throw error;
+        }
         return data;
     } catch (error) {
         rethrowSimple(error);
@@ -75,7 +83,12 @@ export async function fetchPlugin(id: string): Promise<Plugin> {
 
 export async function fetchPluginHistoryItems(id: string, history_id: string): Promise<PluginData> {
     try {
-        const { data } = await axios.get(withPrefix(`/api/plugins/${id}?history_id=${history_id}`));
+        const { data, error } = await GalaxyApi().GET("/api/plugins/{id}", {
+            params: { path: { id }, query: { history_id } },
+        });
+        if (error) {
+            throw error;
+        }
         return data;
     } catch (error) {
         rethrowSimple(error);

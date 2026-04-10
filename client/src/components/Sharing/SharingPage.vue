@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import axios from "axios";
 import { BFormCheckbox } from "bootstrap-vue";
 import { computed, nextTick, reactive, ref, watch } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import type { AnyShareableItemWithStatus, ShareOption } from "@/api";
 import { isShareableHistoryWithStatus } from "@/api";
 import { getFullAppUrl } from "@/app/utils";
 import { useToast } from "@/composables/toast";
-import { getAppRoot } from "@/onload/loadConfig";
 import { useAuthStore } from "@/stores/authStore";
 import { errorMessageAsString } from "@/utils/simple-error";
 
@@ -79,7 +78,15 @@ async function onSubmitSlug(newValue: string) {
     itemUrl.slug = newValue;
 
     try {
-        await axios.put(slugUrl.value, { new_slug: newValue });
+        await GalaxyApi().PUT("/api/{plural_name}/{id}/slug" as never, {
+            params: {
+                path: {
+                    plural_name: props.pluralName.toLowerCase(),
+                    id: props.id,
+                },
+            },
+            body: { new_slug: newValue },
+        });
     } catch (e) {
         onError(e);
     }
@@ -97,10 +104,15 @@ const ready = ref(false);
 async function getSharing() {
     ready.value = false;
     try {
-        const response = await axios.get(
-            `${getAppRoot()}api/${props.pluralName.toLocaleLowerCase()}/${props.id}/sharing`,
-        );
-        assignItem(response.data, true);
+        const { data } = await GalaxyApi().GET("/api/{plural_name}/{id}/sharing" as never, {
+            params: {
+                path: {
+                    plural_name: props.pluralName.toLowerCase(),
+                    id: props.id,
+                },
+            },
+        });
+        assignItem(data, true);
     } catch (e) {
         onError(e);
     }
@@ -144,16 +156,22 @@ async function setSharing(
     };
 
     try {
-        const response = await axios.put(
-            `${getAppRoot()}api/${props.pluralName.toLocaleLowerCase()}/${props.id}/${action}`,
-            data,
-        );
+        const { data: sharedData } = await GalaxyApi().PUT("/api/{plural_name}/{id}/{action}" as never, {
+            params: {
+                path: {
+                    plural_name: props.pluralName.toLowerCase(),
+                    id: props.id,
+                    action,
+                },
+            },
+            body: data,
+        });
 
         errors.value = [];
-        const userIdsSaved = userIds && !permissionsChangeRequired(response.data) && response.data.errors.length === 0;
-        assignItem(response.data, userIdsSaved ?? false);
+        const userIdsSaved = userIds && !permissionsChangeRequired(sharedData) && sharedData.errors.length === 0;
+        assignItem(sharedData, userIdsSaved ?? false);
 
-        if (!permissionsChangeRequired(response.data)) {
+        if (!permissionsChangeRequired(sharedData)) {
             success("Sharing preferences saved");
         }
     } catch (e) {
@@ -201,11 +219,12 @@ async function setUsername() {
     if (!currentUserId.value) {
         return;
     }
-    axios
-        .put(`${getAppRoot()}api/users/${currentUserId.value}/information/inputs`, {
-            username: newUsername.value || "",
+    GalaxyApi()
+        .PUT("/api/users/{user_id}/information/inputs", {
+            params: { path: { user_id: currentUserId.value } },
+            body: { username: newUsername.value || "" },
         })
-        .then((response) => {
+        .then(() => {
             hasUsername.value = true;
             getSharing();
         })

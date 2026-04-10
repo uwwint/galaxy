@@ -1,11 +1,9 @@
 import { faCopy, faEdit, faEye, faPlus, faShareAlt, faTrash, faTrashRestore } from "@fortawesome/free-solid-svg-icons";
 import { useEventBus } from "@vueuse/core";
-import axios from "axios";
 
 import { GalaxyApi } from "@/api";
 import { updateTags } from "@/api/tags";
 import Filtering, { contains, equals, expandNameTag, toBool, type ValidFilter } from "@/utils/filtering";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString, rethrowSimple } from "@/utils/simple-error";
 
 import type { ActionArray, FieldArray, GridConfig } from "./types";
@@ -92,14 +90,23 @@ const fields: FieldArray = [
                 condition: (data: VisualizationEntry) => !data.deleted,
                 handler: async (data: VisualizationEntry) => {
                     try {
-                        const copyResponse = await axios.get(withPrefix(`/api/visualizations/${data.id}`));
-                        const copyViz = copyResponse.data;
+                        const { data: copyViz, error: copyError } = await GalaxyApi().GET("/api/visualizations/{id}", {
+                            params: { path: { id: String(data.id) } },
+                        });
+                        if (copyError) {
+                            throw copyError;
+                        }
                         const newViz = {
                             title: `Copy of '${copyViz.title}'`,
                             type: copyViz.type,
                             config: copyViz.latest_revision.config,
                         };
-                        await axios.post(withPrefix(`/api/visualizations`), newViz);
+                        const { error } = await GalaxyApi().POST("/api/visualizations", {
+                            body: newViz,
+                        });
+                        if (error) {
+                            throw error;
+                        }
                         return {
                             status: "success",
                             message: `'${data.title}' has been copied.`,
@@ -126,7 +133,13 @@ const fields: FieldArray = [
                 condition: (data: VisualizationEntry) => !data.deleted,
                 handler: async (data: VisualizationEntry) => {
                     try {
-                        await axios.put(withPrefix(`/api/visualizations/${data.id}`), { deleted: true });
+                        const { error } = await GalaxyApi().PUT("/api/visualizations/{id}", {
+                            params: { path: { id: String(data.id) } },
+                            body: { deleted: true },
+                        });
+                        if (error) {
+                            throw error;
+                        }
                         return {
                             status: "success",
                             message: `'${data.title}' has been deleted.`,
@@ -145,7 +158,13 @@ const fields: FieldArray = [
                 condition: (data: VisualizationEntry) => !!data.deleted,
                 handler: async (data: VisualizationEntry) => {
                     try {
-                        await axios.put(withPrefix(`/api/visualizations/${data.id}`), { deleted: false });
+                        const { error } = await GalaxyApi().PUT("/api/visualizations/{id}", {
+                            params: { path: { id: String(data.id) } },
+                            body: { deleted: false },
+                        });
+                        if (error) {
+                            throw error;
+                        }
                         return {
                             status: "success",
                             message: `'${data.title}' has been restored.`,

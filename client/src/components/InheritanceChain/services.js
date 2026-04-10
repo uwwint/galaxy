@@ -1,18 +1,13 @@
-import axios from "axios";
-
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export class Services {
-    constructor(options = {}) {
-        this.root = options.root || getAppRoot();
-    }
-
     async getInheritanceChain(datasetId) {
-        const url = `${this.root}api/datasets/${datasetId}/inheritance_chain`;
         try {
-            const response = await axios.get(url);
-            return response.data;
+            const { data } = await GalaxyApi().GET("/api/datasets/{dataset_id}/inheritance_chain", {
+                params: { path: { dataset_id: datasetId } },
+            });
+            return data;
         } catch (e) {
             rethrowSimple(e);
         }

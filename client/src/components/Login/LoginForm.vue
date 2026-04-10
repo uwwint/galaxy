@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import axios from "axios";
 import {
     BAlert,
     BCard,
@@ -14,6 +13,7 @@ import {
 } from "bootstrap-vue";
 import { computed, ref } from "vue";
 
+import { GalaxyApi } from "@/api";
 import { useAuthStore } from "@/stores/authStore";
 import localize from "@/utils/localization";
 import { withPrefix } from "@/utils/redirect";
@@ -140,9 +140,14 @@ function setRedirect(url: string) {
 async function resetLogin() {
     loading.value = true;
     try {
-        const response = await axios.post(withPrefix("/auth/reset_password"), { email: login.value });
+        const { data, error } = await GalaxyApi().POST("/auth/reset_password" as never, {
+            body: { email: login.value },
+        });
+        if (error) {
+            throw error;
+        }
         messageVariant.value = "info";
-        messageText.value = response.data.message;
+        messageText.value = data.message;
     } catch (e) {
         messageVariant.value = "danger";
         messageText.value = errorMessageAsString(e, "Password reset failed for an unknown reason.");

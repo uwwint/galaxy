@@ -1,10 +1,9 @@
 <script lang="ts" setup>
 import { faUsers } from "@fortawesome/free-solid-svg-icons";
-import axios from "axios";
 import { computed, ref } from "vue";
 
+import { GalaxyApi } from "@/api";
 import { initRefs, updateRefs, useCallbacks } from "@/composables/datasetPermissions";
-import { withPrefix } from "@/utils/redirect";
 
 import BreadcrumbHeading from "@/components/Common/BreadcrumbHeading.vue";
 import DatasetPermissionsForm from "@/components/Dataset/DatasetPermissionsForm.vue";
@@ -30,7 +29,12 @@ const inputsUrl = computed(() => {
 });
 
 async function init() {
-    const { data } = await axios.get(withPrefix(inputsUrl.value));
+    const { data, error } = await GalaxyApi().GET("/api/users/{user_id}/permissions/inputs", {
+        params: { path: { user_id: props.userId } },
+    });
+    if (error) {
+        throw error;
+    }
     updateRefs(data.inputs, managePermissionsOptions, accessPermissionsOptions, managePermissions, accessPermissions);
     loading.value = false;
 }
@@ -62,7 +66,18 @@ async function change(value: unknown) {
         DATASET_MANAGE_PERMISSIONS: [managePermissionValue],
         DATASET_ACCESS: access,
     };
-    axios.put(withPrefix(inputsUrl.value), formValue).then(onSuccess).catch(onError);
+    GalaxyApi()
+        .PUT("/api/users/{user_id}/permissions/inputs", {
+            params: { path: { user_id: props.userId } },
+            body: formValue,
+        })
+        .then(({ error }) => {
+            if (error) {
+                throw error;
+            }
+            onSuccess();
+        })
+        .catch(onError);
 }
 
 const { onSuccess, onError } = useCallbacks(init);

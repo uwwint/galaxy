@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import axios, { type AxiosError } from "axios";
 import { BAlert, BForm, BFormCheckbox, BFormGroup } from "bootstrap-vue";
 import { computed, onMounted, ref } from "vue";
 import Multiselect from "vue-multiselect";
 
+import { GalaxyApi } from "@/api";
 import {
     getFilteredOIDCIdps,
     getNeedShowCilogonInstitutionList,
@@ -12,7 +12,6 @@ import {
     submitOIDCLogon,
 } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { useConfig } from "@/composables/config";
-import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 import { capitalizeFirstLetter } from "@/utils/strings";
 
@@ -118,8 +117,10 @@ async function clickCILogonLogin() {
 
 async function getCILogonIdps() {
     try {
-        const { data } = await axios.get(withPrefix("/authnz/get_cilogon_idps"));
-
+        const { data, error } = await GalaxyApi().GET("/authnz/get_cilogon_idps" as never);
+        if (error) {
+            throw error;
+        }
         cILogonIdps.value = data;
 
         if (cILogonIdps.value.length == 1) {
@@ -141,10 +142,8 @@ async function getCILogonIdps() {
             }
         }
     } catch (e) {
-        const error = e as AxiosError<{ err_msg?: string }>;
         messageVariant.value = "danger";
-        const message = error.response?.data && error.response.data.err_msg;
-        messageText.value = message || "Failed to fetch CILogon IdPs.";
+        messageText.value = errorMessageAsString(e, "Failed to fetch CILogon IdPs.");
     }
 }
 

@@ -2,10 +2,8 @@
     <span v-if="decoded_id">({{ decoded_id }})</span>
 </template>
 <script>
-import axios from "axios";
-
+import { GalaxyApi } from "@/api/client";
 import { getGalaxyInstance } from "@/app";
-import { getAppRoot } from "@/onload/loadConfig";
 import { useUserStore } from "@/stores/userStore";
 import { rethrowSimple } from "@/utils/simple-error";
 
@@ -33,10 +31,11 @@ export default {
     methods: {
         decodeId: async function (id) {
             if (this.isAdmin) {
-                const url = `${getAppRoot()}api/configuration/decode/${id}`;
                 try {
-                    const response = await axios.get(url);
-                    this.decoded_id = response.data.decoded_id;
+                    const { data } = await GalaxyApi().GET("/api/configuration/decode/{id}", {
+                        params: { path: { id } },
+                    });
+                    this.decoded_id = data.decoded_id;
                 } catch (e) {
                     rethrowSimple(e);
                 }

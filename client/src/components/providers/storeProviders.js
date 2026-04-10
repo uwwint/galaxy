@@ -1,8 +1,9 @@
 // Simple dataset provider, looks at api for result, renders to slot prop
-import axios from "axios";
 import { mapActions, mapState } from "pinia";
 
+import { GalaxyApi } from "@/api/client";
 import { useDbKeyStore } from "@/stores/dbKeyStore";
+import { getAppRoot } from "@/onload/loadConfig";
 import { prependPath } from "@/utils/redirect";
 
 import { useDatatypeStore } from "../../stores/datatypeStore";
@@ -28,15 +29,21 @@ export const SimpleProviderMixin = {
         },
     },
     methods: {
+        apiPath(url) {
+            const appRoot = getAppRoot();
+            return url.startsWith(appRoot) ? `/${url.slice(appRoot.length)}` : url;
+        },
         async load() {
             this.loading = true;
-            const { data } = await axios.get(this.url);
+            const { data } = await GalaxyApi().GET(this.apiPath(this.url));
             this.item = data;
             this.loading = false;
         },
         async save(newProps) {
             this.loading = true;
-            const { data } = await axios.put(this.url, newProps);
+            const { data } = await GalaxyApi().PUT(this.apiPath(this.url), {
+                body: newProps,
+            });
             this.item = data;
             this.loading = false;
         },

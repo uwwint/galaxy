@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import axios from "axios";
 import {
     BAlert,
     BButton,
@@ -14,7 +13,7 @@ import {
 import { ref } from "vue";
 import { useRouter } from "vue-router/composables";
 
-import { withPrefix } from "@/utils/redirect";
+import { GalaxyApi } from "@/api";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 interface Props {
@@ -50,10 +49,14 @@ async function submit() {
         messageText.value = "Missing provider and/or token.";
     } else {
         try {
-            const response = await axios.post(withPrefix(`/authnz/${provider.value}/create_user?token=${token.value}`));
-
-            if (response.data.redirect_uri) {
-                router.push(response.data.redirect_uri);
+            const { data, error } = await GalaxyApi().POST(`/authnz/${provider.value}/create_user` as never, {
+                params: { query: { token: token.value } },
+            });
+            if (error) {
+                throw error;
+            }
+            if (data.redirect_uri) {
+                router.push(data.redirect_uri);
             } else {
                 router.push("/");
             }
