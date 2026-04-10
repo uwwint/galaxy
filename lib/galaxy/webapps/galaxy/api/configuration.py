@@ -56,6 +56,7 @@ class FastAPIConfiguration:
 
     @router.get(
         "/api/configuration",
+        public=True,
         summary="Return an object containing exposable configuration settings",
         response_description="Object containing exposable configuration settings",
     )

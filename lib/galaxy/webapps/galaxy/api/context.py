@@ -29,7 +29,7 @@ class FastAPIContext:
     configuration_manager: ConfigurationManager = depends(ConfigurationManager)
     user_serializer: CurrentUserSerializer = depends(CurrentUserSerializer)
 
-    @router.get("/context", summary="Return bootstrapped client context")
+    @router.get("/context", public=True, summary="Return bootstrapped client context")
     def index(self, trans: ProvidesUserContext = DependsOnTrans) -> ContextResponse:
         config = self.configuration_manager.get_configuration(trans, SerializationParams(view="all"))
         return ContextResponse(config=config, user=self.user_serializer.serialize_to_view(trans.user, "detailed"))

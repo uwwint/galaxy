@@ -196,6 +196,26 @@ def test_galaxy_access_token_builds_auth_context_on_real_fastapi_request(monkeyp
     }
 
 
+def test_public_context_request_without_auth_is_anonymous(monkeypatch, tmp_path):
+    db_path = tmp_path / "galaxy.sqlite"
+    config = galaxy_mock.MockAppConfig(root=str(tmp_path), database_connection=f"sqlite:///{db_path}")
+    mock_app = galaxy_mock.MockApp(config=config)
+    mock_app.model.session.commit()
+    monkeypatch.setattr(galaxy_app_module, "app", mock_app)
+    test_app = _build_public_auth_context_app()
+
+    with TestClient(test_app) as client:
+        response = client.get("/api/test/public-auth-context")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "auth_session_id": None,
+        "auth_source": "anonymous",
+        "actor_user_id": None,
+        "user_id": None,
+    }
+
+
 def test_invalid_galaxy_bearer_token_still_allows_public_auth_context_request(monkeypatch, tmp_path):
     db_path = tmp_path / "galaxy.sqlite"
     config = galaxy_mock.MockAppConfig(root=str(tmp_path), database_connection=f"sqlite:///{db_path}")
