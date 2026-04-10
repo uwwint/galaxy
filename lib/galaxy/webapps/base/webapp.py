@@ -5,6 +5,7 @@ import inspect
 import logging
 import os
 import re
+import secrets
 import socket
 import time
 from contextlib import ExitStack
@@ -34,6 +35,7 @@ from galaxy.managers import context
 from galaxy.managers.auth_sessions import (
     AUTH_SESSION_COOKIE_NAME,
     AUTH_SESSION_COOKIE_PATH,
+    AUTH_SESSION_CSRF_COOKIE_NAME,
 )
 from galaxy.managers.users import UserManager
 from galaxy.model import (
@@ -339,7 +341,10 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         # set any cross origin resource sharing headers if configured to do so
         self.set_cors_headers()
 
-        if self.environ.get("is_api_request", False):
+        client_route = self.webapp.clientside_routes.match(self.request.path_info, self.environ) is not None
+        auth_header_supplied = bool(self.request.headers.get("Authorization", None))
+        api_key_supplied = bool(self.request.params.get("key", None) or self.request.headers.get("x-api-key", None))
+        if self.environ.get("is_api_request", False) or auth_header_supplied or api_key_supplied:
             # With API requests, if there's a key, use it and associate the
             # user with the transaction.
             # If not, check for an active session but do not create one.
@@ -348,7 +353,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.error_message = self._authenticate_api()
         elif self.app.name == "reports":
             self.auth_session = None
-        else:
+        elif not client_route:
             self._ensure_browser_auth_session()
 
         if self.app.authnz_manager:
@@ -389,7 +394,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
                     self.auth_session.last_activity = now
                     self.sa_session.add(self.auth_session)
                     self.sa_session.commit()
-        elif not self.environ.get("is_api_request", False):
+        elif not self.environ.get("is_api_request", False) and not client_route:
             self._ensure_browser_auth_session()
 
     @property
@@ -522,8 +527,28 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         if self.app.config.cookie_domain is not None:
             self.response.cookies[AUTH_SESSION_COOKIE_NAME]["domain"] = self.app.config.cookie_domain
 
+    def set_auth_csrf_cookie(self, csrf_token: str, expires_at: Optional[datetime.datetime]) -> None:
+        max_age = 0
+        if expires_at is not None:
+            max_age = max(0, int((expires_at - datetime.datetime.utcnow()).total_seconds()))
+        self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME] = unicodify(csrf_token)
+        self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME]["path"] = "/"
+        self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME]["max-age"] = max_age
+        tstamp = time.gmtime(time.time() + max_age)
+        self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME]["expires"] = time.strftime(
+            "%a, %d-%b-%Y %H:%M:%S GMT", tstamp
+        )
+        self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME]["version"] = "1"
+        if self.request.environ.get("wsgi.url_scheme") == "https":
+            self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME]["secure"] = True
+        if self.app.config.cookie_domain is not None:
+            self.response.cookies[AUTH_SESSION_CSRF_COOKIE_NAME]["domain"] = self.app.config.cookie_domain
+
     def clear_auth_cookie(self) -> None:
         self.set_auth_cookie("", datetime.datetime.utcnow())
+
+    def clear_auth_csrf_cookie(self) -> None:
+        self.set_auth_csrf_cookie("", datetime.datetime.utcnow())
 
     def _set_cookie(self, value, name: str, path="/", age=90, version="1", encode_value=False):
         """Convenience method for setting a session cookie"""
@@ -550,11 +575,9 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
         Authenticate for the API via key or session (if available).
         """
         oidc_access_token = self.request.headers.get("Authorization", None)
-        oidc_token_supplied = (
-            self.environ.get("is_api_request", False) and oidc_access_token and "Bearer " in oidc_access_token
-        )
+        oidc_token_supplied = oidc_access_token and "Bearer " in oidc_access_token
         api_key = self.request.params.get("key", None) or self.request.headers.get("x-api-key", None)
-        api_key_supplied = self.environ.get("is_api_request", False) and api_key
+        api_key_supplied = api_key is not None
         if api_key_supplied:
             # Sessionless API transaction, we just need to associate a user.
             try:
@@ -566,7 +589,13 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             # Sessionless API transaction with oidc token, we just need to associate a user.
             oidc_access_token = oidc_access_token.replace("Bearer ", "")
             try:
-                user = self.user_manager.by_oidc_access_token(oidc_access_token)
+                if self.auth_session_manager is not None and self.auth_session_manager.is_galaxy_access_token(
+                    oidc_access_token
+                ):
+                    self.auth_session = self.auth_session_manager.get_session_for_access_token(oidc_access_token)
+                    user = self.auth_session.user
+                else:
+                    user = self.user_manager.by_oidc_access_token(oidc_access_token)
             except AuthenticationFailed as e:
                 return str(e)
             self.set_user(user)
@@ -750,10 +779,12 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             remote_addr=self.request.remote_addr,
             referer=self.request.headers.get("Referer", None),
         )
+        csrf_token = secrets.token_urlsafe(32)
         refresh_token = self.auth_session_manager.issue_refresh_token(auth_session)
         self.sa_session.commit()
         self.auth_session = auth_session
         self.set_auth_cookie(refresh_token, auth_session.refresh_token_expires_at)
+        self.set_auth_csrf_cookie(csrf_token, auth_session.refresh_token_expires_at)
         return auth_session
 
     def invalidate_auth_session(self, logout_all: bool = False) -> None:
@@ -769,6 +800,7 @@ class GalaxyWebTransaction(base.DefaultWebTransaction, context.ProvidesHistoryCo
             self.sa_session.commit()
         self.auth_session = None
         self.clear_auth_cookie()
+        self.clear_auth_csrf_cookie()
 
     def get_history(self, create=False, most_recent=False):
         """

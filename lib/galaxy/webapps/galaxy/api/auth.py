@@ -181,7 +181,7 @@ def _error_payload(message: str, *, status: Optional[str] = None, **kwd: Any) ->
 def _bootstrap_payload(trans: SessionRequestContext, access_token: Optional[str]) -> dict[str, Any]:
     history = trans.history
     return {
-        "authenticated": trans.user is not None,
+        "authenticated": access_token is not None,
         "access_token": access_token,
         "auth_source": trans.auth_source,
         "user": _serialize_user(trans, trans.user),
@@ -216,18 +216,18 @@ def _ensure_browser_auth_session(trans: SessionRequestContext) -> Optional[AuthS
     current_auth_session = trans.auth_session
     if current_auth_session is not None:
         return current_auth_session
-    if trans.user is None or trans.auth_source == "remote_user":
+    if trans.auth_source == "remote_user":
         return None
     auth_session = trans.app.auth_session_manager.create_session(
         user=trans.user,
-        auth_source="galaxy_token",
+        auth_source="anonymous" if trans.user is None else "galaxy_token",
         current_history=trans.history,
         remote_host=_request_remote_host(trans),
         remote_addr=_request_remote_addr(trans),
         referer=_request_headers(trans).get("Referer", None),
     )
     trans.auth_session = auth_session
-    trans._auth_source = "galaxy_token"
+    trans._auth_source = auth_session.auth_source
     return auth_session
 
 
@@ -380,10 +380,12 @@ def _get_user_manager(trans: SessionRequestContext) -> UserManager:
 
 @router.post("/auth/bootstrap", summary="Bootstrap browser auth state")
 def bootstrap(trans: SessionRequestContext = DependsOnTrans):
+    had_auth_session = trans.auth_session is not None
     auth_session = _ensure_browser_auth_session(trans)
     if auth_session is None:
         return _bootstrap_payload(trans, access_token=None)
-    _require_refresh_csrf(trans)
+    if had_auth_session:
+        _require_refresh_csrf(trans)
     refresh_token = trans.app.auth_session_manager.issue_refresh_token(auth_session)
     _set_refresh_cookie(trans, refresh_token, auth_session.refresh_token_expires_at)
     access_token = trans.app.auth_session_manager.mint_access_token(auth_session, scopes=["api:*"])

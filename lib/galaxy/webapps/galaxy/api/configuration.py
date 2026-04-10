@@ -3,7 +3,6 @@ API operations allowing clients to determine Galaxy instance's capabilities
 and configuration settings.
 """
 
-import logging
 from typing import (
     Any,
     Optional,
@@ -25,8 +24,6 @@ from galaxy.webapps.galaxy.api.common import (
     SerializationKeysQueryParam,
     SerializationViewQueryParam,
 )
-
-log = logging.getLogger(__name__)
 
 router = Router(tags=["configuration"])
 

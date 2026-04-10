@@ -244,7 +244,6 @@ class AuthSessionManager:
         auth_session = self.get_session_by_id(auth_session_id)
         if auth_session is None:
             raise exceptions.AuthenticationFailed("Galaxy access token session was not found.")
-        log.debug("Resolved Galaxy access token to auth session %s", auth_session.id)
         return auth_session
 
     def _mint_jwt(

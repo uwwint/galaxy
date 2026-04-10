@@ -3,8 +3,11 @@ from datetime import (
     timedelta,
 )
 
+import pytest
+
 from galaxy import model
 from galaxy.app_unittest_utils import galaxy_mock
+from galaxy.exceptions import AuthenticationFailed
 from galaxy.managers.auth_sessions import (
     AUTH_SESSION_COOKIE_NAME,
     AUTH_SESSION_COOKIE_PATH,
@@ -176,6 +179,62 @@ def test_bootstrap_creates_auth_session():
     assert trans.auth_session is not None
 
 
+def test_bootstrap_creates_anonymous_auth_session():
+    app = galaxy_mock.MockApp()
+    headers, cookies = _make_csrf_request_state()
+    trans = _build_trans(app, auth_source="anonymous", headers=headers, cookies=cookies)
+
+    payload = bootstrap(trans=trans)
+
+    assert payload["authenticated"] is True
+    assert payload["access_token"] is not None
+    assert payload["auth_source"] == "anonymous"
+    assert payload["user"] is None
+    assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME) is not None
+    assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME) is not None
+    assert trans.auth_session is not None
+    assert trans.auth_session.user is None
+
+
+def test_bootstrap_requires_csrf_for_existing_auth_session():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    auth_session, _ = _make_auth_session(app, user, issue_refresh=True)
+    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
+
+    with pytest.raises(AuthenticationFailed):
+        bootstrap(trans=trans)
+
+
+def test_refresh_requires_csrf_for_existing_auth_session():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    auth_session, _ = _make_auth_session(app, user, issue_refresh=True)
+    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
+
+    with pytest.raises(AuthenticationFailed):
+        refresh(trans=trans)
+
+
+def test_refresh_rejects_mismatched_csrf_token_for_existing_auth_session():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    auth_session, _ = _make_auth_session(app, user, issue_refresh=True)
+    headers = {"X-CSRF-Token": "csrf-token"}
+    cookies = {AUTH_SESSION_CSRF_COOKIE_NAME: "different-token"}
+    trans = _build_trans(
+        app,
+        user=user,
+        auth_session=auth_session,
+        auth_source="galaxy_token",
+        headers=headers,
+        cookies=cookies,
+    )
+
+    with pytest.raises(AuthenticationFailed):
+        refresh(trans=trans)
+
+
 def test_refresh_rotates_cookie_for_existing_auth_session():
     app = galaxy_mock.MockApp()
     user = app.user_manager.create(email="user@example.org", username="user", password="password")
@@ -197,6 +256,8 @@ def test_refresh_rotates_cookie_for_existing_auth_session():
     assert new_refresh_token
     assert new_refresh_token != old_refresh_token
     assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
+    with pytest.raises(AuthenticationFailed):
+        app.auth_session_manager.get_session_for_refresh_token(old_refresh_token)
 
 
 def test_login_issues_browser_auth_state():
@@ -213,11 +274,13 @@ def test_login_issues_browser_auth_state():
     assert response["access_token"] is not None
     assert response["auth_source"] == "galaxy_token"
     assert response["user"]["email"] == user.email
+    assert response["current_history_id"] == app.security.encode_id(history.id)
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME)
     assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME)
     assert trans.auth_session is not None
     assert trans.user == user
     assert history.user == user
+    assert trans.auth_session.current_history == history
 
 
 def test_register_issues_browser_auth_state():
@@ -332,6 +395,16 @@ def test_logout_invalidates_current_auth_session_and_clears_cookie():
     assert refreshed is None
     assert _cookie_value(trans, AUTH_SESSION_COOKIE_NAME) == ""
     assert _cookie_value(trans, AUTH_SESSION_CSRF_COOKIE_NAME) == ""
+
+
+def test_logout_requires_csrf_for_existing_auth_session():
+    app = galaxy_mock.MockApp()
+    user = app.user_manager.create(email="user@example.org", username="user", password="password")
+    auth_session, _ = _make_auth_session(app, user, issue_refresh=True)
+    trans = _build_trans(app, user=user, auth_session=auth_session, auth_source="galaxy_token")
+
+    with pytest.raises(AuthenticationFailed):
+        logout(trans=trans)
 
 
 def test_tool_runner_redirect_issues_path_scoped_cookie():

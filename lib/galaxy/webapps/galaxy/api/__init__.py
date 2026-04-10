@@ -3,7 +3,6 @@ This module *does not* contain API routes. It exclusively contains dependencies 
 """
 
 import inspect
-import logging
 from collections.abc import (
     AsyncGenerator,
     Callable,
@@ -107,8 +106,6 @@ api_key_header = APIKeyHeader(name="x-api-key", auto_error=False)
 auth_session_cookie = APIKeyCookie(name=AUTH_SESSION_COOKIE_NAME, auto_error=False)
 api_bearer_token = HTTPBearer(auto_error=False)
 
-log = logging.getLogger(__name__)
-
 
 def get_app() -> StructuredApp:
     return cast(StructuredApp, galaxy_app.app)
@@ -159,7 +156,8 @@ def get_auth_session_from_refresh_cookie(
     if not refresh_token:
         return None
     try:
-        return auth_session_manager.get_session_for_refresh_token(refresh_token)
+        auth_session = auth_session_manager.get_session_for_refresh_token(refresh_token)
+        return auth_session
     except AuthenticationFailed:
         return None
 
@@ -173,10 +171,8 @@ def get_auth_session_from_bearer_token(
     # Galaxy-issued bearer tokens are handled here so they do not fall through
     # to the trusted-external-OIDC resolver.
     if not auth_session_manager.is_galaxy_access_token(bearer_token.credentials):
-        log.debug("Bearer token is not a Galaxy token; deferring to external OIDC auth.")
         return None
     try:
-        log.debug("Bearer token classified as Galaxy token; resolving auth session.")
         return auth_session_manager.get_session_for_access_token(bearer_token.credentials)
     except AuthenticationFailed:
         raise
