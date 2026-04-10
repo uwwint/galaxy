@@ -9,6 +9,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import jwt
+from jwt import InvalidTokenError
 from social_core.backends.open_id_connect import OpenIdConnectAuth
 from typing_extensions import TypeIs
 
@@ -63,6 +64,8 @@ def decode_access_token(token_str: str, backend: OpenIdConnectAuth) -> dict:
     :raises InvalidTokenError: If token is invalid or verification fails
     """
     signing_key = backend.find_valid_key(token_str)
+    if signing_key is None:
+        raise InvalidTokenError("Unable to find a signing key for the supplied access token.")
     jwk = jwt.PyJWK(signing_key)
 
     strategy = backend.strategy

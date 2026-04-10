@@ -27,6 +27,7 @@ from jwt import (
     InvalidAudienceError,
     InvalidIssuerError,
     InvalidSignatureError,
+    InvalidTokenError,
 )
 from social_core.backends.open_id_connect import OpenIdConnectAuth
 from sqlalchemy import create_engine
@@ -229,6 +230,16 @@ def test_decode_access_token_invalid_key():
     assert result["access_token"] is None
     # Test the actual decoding raises expected error
     with pytest.raises(InvalidSignatureError):
+        decode_access_token_oidc(token_str=dummy_access_token.access_token_str, backend=mock_backend)
+
+
+def test_decode_access_token_without_signing_key():
+    dummy_access_token = create_access_token()
+    mock_backend = MagicMock()
+    mock_backend.find_valid_key.return_value = None
+    mock_backend.__class__ = OpenIdConnectAuth  # type: ignore[assignment]
+
+    with pytest.raises(InvalidTokenError, match="Unable to find a signing key"):
         decode_access_token_oidc(token_str=dummy_access_token.access_token_str, backend=mock_backend)
 
 
