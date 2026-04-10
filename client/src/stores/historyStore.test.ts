@@ -53,7 +53,6 @@ describe("historyStore auth sync", () => {
             username: "user",
         };
         authStore.currentHistoryId = "encoded-history";
-        authStore.authStateVersion += 1;
 
         await nextTick();
         await Promise.resolve();

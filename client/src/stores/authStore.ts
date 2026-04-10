@@ -91,7 +91,6 @@ export const useAuthStore = defineStore("authStore", () => {
     const currentHistoryId = ref<string | null>(null);
     const bootstrapStatus = ref<"idle" | "loading" | "ready" | "error">("idle");
     const bootstrapError = ref<string | null>(null);
-    const authStateVersion = ref(0);
 
     let refreshTimer: number | null = null;
     let refreshPromise: Promise<BrowserAuthPayload> | null = null;
@@ -119,10 +118,6 @@ export const useAuthStore = defineStore("authStore", () => {
         bootstrapError.value = null;
     }
 
-    function notifyAuthStateChanged() {
-        authStateVersion.value += 1;
-    }
-
     function clearAuthState() {
         accessToken.value = null;
         accessTokenExpiresAt.value = null;
@@ -133,7 +128,6 @@ export const useAuthStore = defineStore("authStore", () => {
         syncGalaxyUser(null);
         clearRefreshTimer();
         resetBootstrapState();
-        notifyAuthStateChanged();
     }
 
     function bindRefreshListeners() {
@@ -181,7 +175,6 @@ export const useAuthStore = defineStore("authStore", () => {
         }
         bootstrapStatus.value = "ready";
         bootstrapError.value = null;
-        notifyAuthStateChanged();
         return payload;
     }
 
@@ -286,7 +279,6 @@ export const useAuthStore = defineStore("authStore", () => {
         accessToken,
         authSource,
         actorUser,
-        authStateVersion,
         bootstrapError,
         bootstrapStatus,
         currentHistoryId,

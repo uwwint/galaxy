@@ -132,7 +132,6 @@ describe("userStore", () => {
             id: "encoded-user",
             username: "user",
         };
-        authStore.authStateVersion += 1;
 
         await nextTick();
         await Promise.resolve();
@@ -233,7 +232,6 @@ describe("userStore", () => {
             id: "encoded-user",
             username: "user",
         };
-        authStore.authStateVersion += 1;
         await nextTick();
 
         expect(userStore.currentUser?.username).toBe("user");

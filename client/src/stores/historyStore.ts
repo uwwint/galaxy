@@ -442,7 +442,7 @@ export const useHistoryStore = defineStore("historyStore", () => {
     );
 
     watch(
-        () => [authStore.bootstrapStatus, authStore.authStateVersion, authStore.accessToken, authStore.effectiveUser?.id],
+        () => [authStore.bootstrapStatus, authStore.accessToken, authStore.effectiveUser?.id],
         syncFromAuthStore,
         { immediate: true },
     );

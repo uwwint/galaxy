@@ -2,8 +2,6 @@ import { defineStore } from "pinia";
 import { computed, ref, watch } from "vue";
 
 import { type AnyUser, isAdminUser, isAnonymousUser, isRegisteredUser, type RegisteredUser } from "@/api";
-import { getGalaxyInstance } from "@/app";
-import { User } from "@/app/user";
 import { useHashedUserId } from "@/composables/hashedUserId";
 import { useUserLocalStorageFromHashId } from "@/composables/userLocalStorageFromHashedId";
 import { useAuthStore } from "@/stores/authStore";
@@ -30,14 +28,6 @@ export type ListViewMode = "grid" | "list";
 type UserListViewPreferences = Record<string, ListViewMode>;
 
 const RECENT_TOOLS_LIMIT = 10;
-
-function syncGalaxyUser(user: AnyUser | null) {
-    const galaxy = getGalaxyInstance();
-    if (!galaxy) {
-        return;
-    }
-    galaxy.user = new User(user ?? {});
-}
 
 export const useUserStore = defineStore("userStore", () => {
     const currentUser = ref<AnyUser>(null);
@@ -67,7 +57,6 @@ export const useUserStore = defineStore("userStore", () => {
         currentPreferences.value = null;
         recentTools.value = [];
         loadPromise = null;
-        syncGalaxyUser(null);
     }
 
     const isAdmin = computed(() => {
@@ -98,7 +87,6 @@ export const useUserStore = defineStore("userStore", () => {
 
     function setCurrentUser(user: RegisteredUser) {
         currentUser.value = user;
-        syncGalaxyUser(user);
     }
 
     function clearUserForAuthTransition() {
@@ -107,7 +95,6 @@ export const useUserStore = defineStore("userStore", () => {
         currentUser.value = null;
         currentPreferences.value = null;
         recentTools.value = [];
-        syncGalaxyUser(null);
     }
 
     function syncFromAuthStore() {
@@ -131,7 +118,6 @@ export const useUserStore = defineStore("userStore", () => {
 
         if (authUser && isRegisteredUser(authUser)) {
             currentUser.value = authUser;
-            syncGalaxyUser(authUser);
             if (!currentPreferences.value || userChanged) {
                 currentPreferences.value = null;
                 void loadUser(false);
@@ -159,13 +145,10 @@ export const useUserStore = defineStore("userStore", () => {
                         if (isRegisteredUser(user)) {
                             currentUser.value = user;
                             currentPreferences.value = processUserPreferences(user);
-                            syncGalaxyUser(user);
                         } else if (isAnonymousUser(user)) {
                             currentUser.value = user;
-                            syncGalaxyUser(user);
                         } else if (user === null) {
                             currentUser.value = null;
-                            syncGalaxyUser(null);
                         }
                         if (includeHistories) {
                             const historyStore = useHistoryStore();
@@ -191,7 +174,7 @@ export const useUserStore = defineStore("userStore", () => {
     }
 
     watch(
-        () => [authStore.bootstrapStatus, authStore.authStateVersion, authStore.accessToken, authStore.effectiveUser?.id],
+        () => [authStore.bootstrapStatus, authStore.accessToken, authStore.effectiveUser?.id],
         syncFromAuthStore,
         { immediate: true },
     );

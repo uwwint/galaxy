@@ -347,36 +347,6 @@ describe("authStore", () => {
         expect(authStore.authSource).toBeNull();
     });
 
-    it("increments the auth state version on bootstrap and logout transitions", async () => {
-        const accessToken = makeAccessToken();
-        document.cookie = "galaxy_refresh_csrf_token=csrf-token";
-        vi.mocked(axios.post)
-            .mockResolvedValueOnce({
-                data: {
-                    access_token: accessToken,
-                    actor_user: null,
-                    auth_source: "galaxy_token",
-                    authenticated: true,
-                    current_history_id: null,
-                    user: null,
-                },
-            })
-            .mockResolvedValueOnce({
-                data: {
-                    message: "Success.",
-                },
-            });
-
-        const authStore = useAuthStore();
-        const initialVersion = authStore.authStateVersion;
-
-        await authStore.bootstrap();
-        expect(authStore.authStateVersion).toBe(initialVersion + 1);
-
-        await authStore.logout();
-        expect(authStore.authStateVersion).toBe(initialVersion + 2);
-    });
-
     it("refreshes proactively only when the token is near expiry and the tab is visible", async () => {
         vi.useFakeTimers();
         vi.setSystemTime(new Date("2024-01-01T00:00:00Z"));
