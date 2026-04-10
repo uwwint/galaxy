@@ -2,8 +2,7 @@
 import { faUpload } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { BBadge } from "bootstrap-vue";
-import { onMounted, type Ref, ref, watch } from "vue";
-import Vue from "vue";
+import Vue, { onMounted, ref, watch } from "vue";
 
 import type { DataOption } from "@/components/Form/Elements/FormData/types";
 import type { SelectionItem } from "@/components/SelectionDialog/selectionTypes";
@@ -58,7 +57,7 @@ const { openUploadModal } = useUploadMethodModal();
 
 const errorMessage = ref("");
 const filter = ref("");
-const items: Ref<Array<Record>> = ref([]);
+const items = ref<Array<Record>>([]);
 const hasValue = ref(false);
 const modalShow = ref(true);
 const optionsShow = ref(true);

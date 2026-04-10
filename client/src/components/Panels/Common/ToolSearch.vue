@@ -1,48 +1,31 @@
 <script setup lang="ts">
-import { BAlert } from "bootstrap-vue";
 import { storeToRefs } from "pinia";
-import { nextTick } from "vue";
-import { onMounted, onUnmounted, type PropType, watch } from "vue";
+import { nextTick, watch } from "vue";
 
 import { FAVORITES_KEYS, searchTools } from "@/components/Panels/utilities";
-import { type Tool, type ToolPanelItem, type ToolSection, useToolStore } from "@/stores/toolStore";
+import type { Tool, ToolPanelItem, ToolSection } from "@/stores/toolStore";
 import { useUserStore } from "@/stores/userStore";
 import _l from "@/utils/localization";
 
 import DelayedInput from "@/components/Common/DelayedInput.vue";
-import LoadingSpan from "@/components/LoadingSpan.vue";
 
 const MIN_QUERY_LENGTH = 3;
 
-const props = defineProps({
-    currentPanelView: {
-        type: String,
-        required: true,
-    },
-    placeholder: {
-        type: String,
-        default: "search tools",
-    },
-    query: {
-        type: String,
-        default: null,
-    },
-    queryPending: {
-        type: Boolean,
-        default: false,
-    },
-    toolsList: {
-        type: Array as PropType<Tool[]>,
-        required: true,
-    },
-    currentPanel: {
-        type: Object as PropType<Record<string, ToolPanelItem>>,
-        required: true,
-    },
-    useWorker: {
-        type: Boolean,
-        default: false,
-    },
+interface Props {
+    currentPanelView: string;
+    placeholder?: string;
+    query?: string | null;
+    queryPending?: boolean;
+    toolsList: Tool[];
+    currentPanel: Record<string, ToolPanelItem>;
+    useWorker?: boolean;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    placeholder: "search tools",
+    query: null,
+    queryPending: false,
+    useWorker: false,
 });
 
 const emit = defineEmits<{
@@ -56,8 +39,6 @@ const emit = defineEmits<{
 }>();
 
 const { currentFavorites } = storeToRefs(useUserStore());
-const toolStore = useToolStore();
-const { searchWorker } = storeToRefs(toolStore);
 
 interface RequestPayload {
     tools: Tool[];
@@ -144,23 +125,6 @@ function onMessage(event: MessageEvent) {
     }
 }
 
-onMounted(() => {
-    if (props.useWorker) {
-        // initialize worker
-        if (!searchWorker.value) {
-            searchWorker.value = new Worker(new URL("../toolSearch.worker.js", import.meta.url), { type: "module" });
-        }
-        searchWorker.value.onmessage = onMessage;
-    }
-});
-
-onUnmounted(() => {
-    // The worker is not terminated but it will not be listening to messages
-    if (searchWorker.value?.onmessage) {
-        searchWorker.value.onmessage = null;
-    }
-});
-
 watch(
     () => currentFavorites.value.tools,
     () => {
@@ -191,18 +155,14 @@ function checkQuery(q: string) {
 }
 
 function post(message: object) {
-    if (props.useWorker) {
-        searchWorker.value?.postMessage(message);
-    } else {
-        nextTick(() => {
-            handlePost({ data: message as SearchEventData });
-        });
-    }
+    nextTick(() => {
+        handlePost({ data: message as SearchEventData });
+    });
 }
 </script>
 
 <template>
-    <div v-if="searchWorker || !props.useWorker">
+    <div>
         <DelayedInput
             class="mb-3"
             :value="props.query"
@@ -211,7 +171,4 @@ function post(message: object) {
             :placeholder="placeholder"
             @change="checkQuery" />
     </div>
-    <BAlert v-else class="mb-3" variant="info" show>
-        <LoadingSpan message="Loading Tool Search" />
-    </BAlert>
 </template>
