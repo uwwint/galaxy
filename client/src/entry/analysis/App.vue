@@ -95,7 +95,7 @@ export default {
 
         const userStore = useUserStore();
         const authStore = useAuthStore();
-        const { currentTheme } = storeToRefs(userStore);
+        const { currentTheme, currentUser } = storeToRefs(userStore);
 
         const toastRef = ref(null);
         setToastComponentRef(toastRef);
@@ -152,6 +152,7 @@ export default {
             confirmDialogRef,
             uploadModal,
             currentTheme,
+            currentUser,
             embedded,
             currentTour,
         };
@@ -165,7 +166,7 @@ export default {
     },
     computed: {
         showInactivityWarning() {
-            return this.config.user_activation_on && this.Galaxy?.user?.id && !this.Galaxy.user.get("active");
+            return this.config.user_activation_on && this.currentUser?.id && !this.currentUser?.active;
         },
         showMasthead() {
             const masthead = this.$route.query.hide_masthead;

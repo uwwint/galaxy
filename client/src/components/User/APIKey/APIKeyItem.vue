@@ -4,8 +4,8 @@ import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
 import { ref } from "vue";
 
 import type { APIKeyModel } from "@/api/users";
-import { getGalaxyInstance } from "@/app";
 import { useConfirmDialog } from "@/composables/confirmDialog";
+import { useAuthStore } from "@/stores/authStore";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import services from "./model/service";
@@ -21,8 +21,9 @@ const props = defineProps<{
 const emit = defineEmits(["getAPIKey"]);
 
 const { confirm } = useConfirmDialog();
+const authStore = useAuthStore();
 
-const currentUserId = getGalaxyInstance().user.id;
+const currentUserId = authStore.effectiveUser?.id;
 
 const hover = ref(false);
 const errorMessage = ref<string | null>(null);
@@ -36,6 +37,10 @@ async function attemptKeyDeletion() {
     });
 
     if (confirmed) {
+        if (!currentUserId) {
+            errorMessage.value = "Unable to determine the current user.";
+            return;
+        }
         try {
             await services.deleteAPIKey(currentUserId);
             errorMessage.value = null;

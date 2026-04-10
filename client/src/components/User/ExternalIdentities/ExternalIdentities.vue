@@ -99,6 +99,7 @@ import Vue from "vue";
 
 import { getGalaxyInstance } from "@/app";
 import { Toast } from "@/composables/toast";
+import { useAuthStore } from "@/stores/authStore";
 import { userLogout } from "@/utils/logout";
 import { capitalizeFirstLetter } from "@/utils/strings";
 
@@ -114,6 +115,7 @@ export default {
     },
     data() {
         const galaxy = getGalaxyInstance();
+        const authStore = useAuthStore();
         return {
             items: [],
             showHelp: true,
@@ -121,10 +123,13 @@ export default {
             doomedItem: null,
             errorMessage: null,
             enable_oidc: galaxy.config.enable_oidc,
-            userEmail: galaxy.user.get("email"),
+            authStore,
         };
     },
     computed: {
+        userEmail() {
+            return this.authStore.effectiveUser?.email ?? "";
+        },
         connectExternal() {
             var urlParams = new URLSearchParams(window.location.search);
             return urlParams.has("connect_external") && urlParams.get("connect_external") == "true";

@@ -1,9 +1,9 @@
 <script setup>
 import { faPlus, faSpinner } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/vue-fontawesome";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 
-import { getGalaxyInstance } from "@/app";
+import { useAuthStore } from "@/stores/authStore";
 
 import svc from "./model/service";
 
@@ -16,18 +16,25 @@ const loading = ref(false);
 const errorMessage = ref(null);
 const createLoading = ref(false);
 
-const currentUserId = getGalaxyInstance().user.id;
+const authStore = useAuthStore();
+const currentUserId = computed(() => authStore.effectiveUser?.id ?? null);
 
 const getAPIKey = () => {
+    if (!currentUserId.value) {
+        return;
+    }
     loading.value = true;
-    svc.getAPIKey(currentUserId)
+    svc.getAPIKey(currentUserId.value)
         .then((result) => (apiKey.value = result[0]))
         .catch((err) => (errorMessage.value = err.message))
         .finally(() => (loading.value = false));
 };
 const createNewAPIKey = () => {
+    if (!currentUserId.value) {
+        return;
+    }
     createLoading.value = true;
-    svc.createNewAPIKey(currentUserId)
+    svc.createNewAPIKey(currentUserId.value)
         .then(() => getAPIKey())
         .catch((err) => (errorMessage.value = err.message))
         .finally(() => (createLoading.value = false));
