@@ -61,7 +61,6 @@ import { setToastComponentRef } from "@/composables/toast";
 import { getAppRoot } from "@/onload";
 import { useAuthStore } from "@/stores/authStore";
 import { useEntryPointStore } from "@/stores/entryPointStore";
-import { useHistoryStore } from "@/stores/historyStore";
 import { useNotificationsStore } from "@/stores/notificationsStore";
 import { useTourStore } from "@/stores/tourStore";
 import { useUserStore } from "@/stores/userStore";
@@ -108,8 +107,6 @@ export default {
         setGlobalUploadModal(uploadModal);
 
         const embedded = useRouteQueryBool("embed");
-        const historyStore = useHistoryStore();
-        historyStore.startWatchingHistory();
 
         watch(
             () => embedded.value,

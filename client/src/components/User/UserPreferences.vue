@@ -17,7 +17,7 @@ import {
     faSignOut,
     faUsers,
 } from "font-awesome-6";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 
 import { hasSingleOidcProfile, type OIDCConfig } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { getUserPreferencesModel } from "@/components/User/UserPreferencesModel";
@@ -82,7 +82,7 @@ const showOidcProfile = computed<boolean>(() => {
 });
 const hasLogout = computed(() => {
     if (isConfigLoaded.value) {
-        return authStore.hasActiveAuthToken() && !config.value.single_user;
+        return authStore.isAuthenticated && !config.value.single_user;
     } else {
         return false;
     }

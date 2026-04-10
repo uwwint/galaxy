@@ -12,12 +12,12 @@ import {
     BFormText,
 } from "bootstrap-vue";
 import { computed, type Ref, ref } from "vue";
-import { useRouter } from "vue-router/composables";
 
 import { getOIDCIdpsWithRegistration, type OIDCConfig } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { Toast } from "@/composables/toast";
 import { useAuthStore } from "@/stores/authStore";
 import localize from "@/utils/localization";
+import { withPrefix } from "@/utils/redirect";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import GButton from "../BaseComponents/GButton.vue";
@@ -42,7 +42,6 @@ interface Props {
 
 const props = defineProps<Props>();
 const authStore = useAuthStore();
-const router = useRouter();
 
 const email = ref(null);
 const confirm = ref(null);
@@ -86,12 +85,7 @@ async function submit() {
             Toast.info(response.message);
         }
 
-        await router.push({
-            path: "/login/callback",
-            query: {
-                redirect: props.redirect || "/",
-            },
-        });
+        window.location.assign(withPrefix(props.redirect || "/"));
     } catch (error: any) {
         disableCreate.value = false;
         messageText.value = errorMessageAsString(error, "Registration failed for an unknown reason.");

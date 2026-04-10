@@ -13,7 +13,6 @@ import {
     BFormText,
 } from "bootstrap-vue";
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router/composables";
 
 import { useAuthStore } from "@/stores/authStore";
 import localize from "@/utils/localization";
@@ -47,7 +46,6 @@ const props = withDefaults(defineProps<Props>(), {
     disableLocalAccounts: false,
 });
 
-const router = useRouter();
 const authStore = useAuthStore();
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -113,12 +111,7 @@ async function submitLogin() {
             window.location.href = withPrefix("/user/external_ids?connect_external=true");
         } else if (response.access_token) {
             const redirectTarget = response.redirect || redirect || "/";
-            await router.push({
-                path: "/login/callback",
-                query: {
-                    redirect: redirectTarget,
-                },
-            });
+            window.location.assign(withPrefix(redirectTarget));
         } else if (response.redirect) {
             window.location.href = withPrefix(encodeURI(response.redirect));
         } else {
@@ -159,7 +152,7 @@ async function resetLogin() {
 }
 
 function returnToLogin() {
-    router.push("/login/start");
+    window.location.assign(withPrefix("/login/start"));
 }
 </script>
 

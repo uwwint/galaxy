@@ -50,12 +50,21 @@ describe("LoginForm", () => {
                 const url = request.url;
                 const data = (await request.json()) as Record<string, unknown>;
                 postRequests.push({ url, data });
-                return HttpResponse.json({});
+                return HttpResponse.json({
+                    access_token: "token",
+                    actor_user: null,
+                    auth_source: "galaxy_token",
+                    authenticated: true,
+                    current_history_id: null,
+                    redirect: "/user",
+                    user: null,
+                });
             }),
         );
     });
 
     it("basics", async () => {
+        const originalHref = window.location.href;
         const wrapper = await mountLoginForm();
 
         const cardHeader = wrapper.find(".card-header");
@@ -81,6 +90,21 @@ describe("LoginForm", () => {
         expect(postRequests.length).toBe(1);
         expect(postRequests[0]?.data.login).toBe("test_user");
         expect(postRequests[0]?.data.password).toBe("test_pwd");
+        window.location.href = originalHref;
+    });
+
+    it("redirects directly after a successful internal login", async () => {
+        const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+
+        const wrapper = await mountLoginForm();
+
+        await wrapper.find("input#login-form-name").setValue("test_user");
+        await wrapper.find("input#login-form-password").setValue("test_pwd");
+        await wrapper.find("button[type='submit']").trigger("submit");
+        await flushPromises();
+
+        expect(assign).toHaveBeenCalledWith("/user");
+        assign.mockRestore();
     });
 
     it("props", async () => {
@@ -125,6 +149,7 @@ describe("LoginForm", () => {
         const external_email = "test@test.com";
         const provider_id = "test_provider";
         const provider_label = "Provider";
+        const originalHref = window.location.href;
 
         // Mock window.location.search by overriding the property
         const originalSearch = window.location.search;
@@ -174,6 +199,7 @@ describe("LoginForm", () => {
             writable: true,
             value: originalSearch,
         });
+        window.location.href = originalHref;
     });
 
     it("renders message from query params", async () => {

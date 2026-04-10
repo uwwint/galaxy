@@ -311,10 +311,6 @@ export const useAuthStore = defineStore("authStore", () => {
         return response;
     }
 
-    function hasActiveAuthToken() {
-        return accessToken.value !== null;
-    }
-
     return {
         accessToken,
         authSource,
@@ -325,7 +321,6 @@ export const useAuthStore = defineStore("authStore", () => {
         currentHistoryId,
         effectiveUser,
         ensureBootstrap,
-        hasActiveAuthToken,
         isAuthenticated,
         isImpersonating,
         bootstrap,

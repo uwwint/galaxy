@@ -1,16 +1,31 @@
 import { createTestingPinia } from "@pinia/testing";
 import { getLocalVue, injectTestRouter } from "@tests/vitest/helpers";
 import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
+import flushPromises from "flush-promises";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+import { HttpResponse, useServerMock } from "@/api/client/__mocks__";
 
 import MountTarget from "./RegisterForm.vue";
 
 const localVue = getLocalVue(true);
 const router = injectTestRouter(localVue);
+const { server, http } = useServerMock();
 
 describe("RegisterForm", () => {
+    beforeEach(() => {
+        server.use(
+            http.get("/api/configuration", ({ response }) => {
+                return response.untyped(HttpResponse.json({ oidc: { cilogon: false } }));
+            }),
+            http.untyped.post(/.*\/auth\/register.*/, async () => {
+                return HttpResponse.json({});
+            }),
+        );
+    });
+
     it("basics", async () => {
-        const pinia = createTestingPinia({ createSpy: vi.fn });
+        const pinia = createTestingPinia({ createSpy: vi.fn, stubActions: false });
         const wrapper = mount(MountTarget as object, {
             localVue,
             pinia,
@@ -38,6 +53,30 @@ describe("RegisterForm", () => {
         const usernameField = inputs.at(3);
         expect(usernameField.attributes("type")).toBe("text");
         await usernameField.setValue("test_user");
+    });
+
+    it("redirects directly after registration", async () => {
+        const pinia = createTestingPinia({ createSpy: vi.fn, stubActions: false });
+        const assign = vi.spyOn(window.location, "assign").mockImplementation(() => undefined);
+
+        const wrapper = mount(MountTarget as object, {
+            localVue,
+            pinia,
+            propsData: {
+                redirect: "/user",
+            },
+            router,
+        });
+
+        await wrapper.find("input#register-form-email").setValue("test_user@test.org");
+        await wrapper.find("input#register-form-password").setValue("test_pwd");
+        await wrapper.find("input#register-form-confirm").setValue("test_pwd");
+        await wrapper.find("input#register-form-username").setValue("test_user");
+        await wrapper.find("button[type='submit']").trigger("submit");
+        await flushPromises();
+
+        expect(assign).toHaveBeenCalledWith("/user");
+        assign.mockRestore();
     });
 
     // TODO: Changing the original `<a>` to a `GLink` has made it so that the link never appears in the wrapper.
