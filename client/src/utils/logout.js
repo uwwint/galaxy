@@ -1,5 +1,4 @@
-import axios from "axios";
-
+import { GalaxyApi } from "@/api";
 import { getGalaxyInstance } from "@/app";
 import { useAuthStore } from "@/stores/authStore";
 import { withPrefix } from "@/utils/redirect";
@@ -16,7 +15,7 @@ export function userLogout(logoutAll = false) {
         .logout(logoutAll)
         .then((response) => {
             if (Galaxy.config.enable_oidc) {
-                return axios.get(withPrefix("/authnz/logout"));
+                return GalaxyApi().GET("/authnz/logout");
             }
             return response;
         })

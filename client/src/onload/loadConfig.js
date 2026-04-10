@@ -1,15 +1,16 @@
-import { serverPath } from "@/utils/serverPath";
+import { GalaxyApi } from "@/api";
+import { getAppRoot } from "@/onload/appRoot";
 
 let cachedConfig = null;
 
 export async function loadConfig() {
     if (!cachedConfig) {
         try {
-            const response = await fetch(`${getAppRoot()}context`);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch /context (${response.status})`);
+            const { data, error } = await GalaxyApi().GET("/context");
+            if (error) {
+                throw error;
             }
-            cachedConfig = await response.json();
+            cachedConfig = data;
         } catch (err) {
             console.error("Failed to load Galaxy configuration:", err);
             return {};
@@ -25,11 +26,4 @@ export async function loadConfig() {
  * @param {string} [defaultRoot="/"]
  * @returns {string}
  */
-export function getAppRoot(defaultRoot = "/") {
-    if (typeof document === "undefined") {
-        return defaultRoot;
-    }
-    const links = document.getElementsByTagName("link");
-    const indexLink = Array.from(links).find((link) => link.rel == "index");
-    return indexLink && indexLink.href ? serverPath(indexLink.href) : defaultRoot;
-}
+export { getAppRoot };

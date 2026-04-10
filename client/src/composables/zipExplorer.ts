@@ -1,5 +1,4 @@
 import { useEventBus } from "@vueuse/core";
-import axios from "axios";
 import {
     AbstractZipExplorer,
     type AnyZipEntry,
@@ -13,6 +12,7 @@ import {
 } from "ro-crate-zip-explorer";
 import { computed, ref } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { getFullAppUrl } from "@/app/utils";
 import { defaultModel, type FileStream } from "@/components/Upload/model";
 import { errorMessageAsString, rethrowSimple } from "@/utils/simple-error";
@@ -84,7 +84,9 @@ export function useZipExplorer() {
             const extractUrl = toExtractUrl(zipUrl, entry);
             if (isWorkflowFile(file)) {
                 try {
-                    await axios.post(getFullAppUrl("api/workflows"), { archive_source: extractUrl });
+                    await GalaxyApi().POST("/api/workflows", {
+                        body: { archive_source: extractUrl },
+                    });
                 } catch (e) {
                     rethrowSimple(e);
                 }
@@ -126,7 +128,9 @@ export function useZipExplorer() {
             targets: [target],
         };
         try {
-            await axios.post(getFullAppUrl("api/tools/fetch"), payload);
+            await GalaxyApi().POST("/api/tools/fetch", {
+                body: payload,
+            });
         } catch (e) {
             rethrowSimple(e);
         }
@@ -157,7 +161,9 @@ export function useZipExplorer() {
                     const formData = new FormData();
                     formData.append("archive_file", new Blob([new Uint8Array(fileData)]), file.name);
 
-                    await axios.post(getFullAppUrl("api/workflows"), formData);
+                    await GalaxyApi().POST("/api/workflows", {
+                        body: formData,
+                    });
                 } catch (e) {
                     rethrowSimple(e);
                 }
@@ -330,20 +336,18 @@ export async function isRemoteZipFile(url: string): Promise<boolean> {
     if (!isValidUrl(url)) {
         return false;
     }
-    const proxyUrl = getProxiedUrl(url);
     try {
-        const response = await fetch(proxyUrl, {
-            method: "GET",
+        const { data, error } = await GalaxyApi().GET("/api/proxy" as never, {
+            params: { query: { url } },
             headers: {
                 Range: "bytes=0-3",
             },
+            parseAs: "blob",
         });
-
-        if (!response.ok) {
+        if (error || !data) {
             return false;
         }
-
-        const buffer = new Uint8Array(await response.arrayBuffer());
+        const buffer = new Uint8Array(await data.arrayBuffer());
 
         // Check for ZIP magic number: 0x50 0x4B 0x03 0x04
         return buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04;

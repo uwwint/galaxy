@@ -5,6 +5,7 @@ import { BAlert } from "bootstrap-vue";
 import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 
+import { GalaxyApi } from "@/api/client";
 import { useDatasetStore } from "@/stores/datasetStore";
 import { useUserStore } from "@/stores/userStore";
 import STATES from "@/utils/datasetStates";
@@ -37,10 +38,11 @@ const sanitizedToolId = ref<string | null>(null);
 const { isAdmin } = storeToRefs(useUserStore());
 
 const dataset = computed(() => getDataset(props.datasetId));
-const datasetUrl = computed(() => `/datasets/${props.datasetId}/display/`);
+const datasetUrl = computed(() => `/api/datasets/${props.datasetId}/display`);
 const downloadUrl = computed(() => withPrefix(`${datasetUrl.value}?to_ext=${dataset.value?.file_ext}`));
 const isLoading = computed(() => isLoadingDataset(props.datasetId));
-const previewUrl = computed(() => `${datasetUrl.value}?preview=True`);
+const previewApiUrl = computed(() => `${datasetUrl.value}?preview=True`);
+const previewUrl = computed(() => withPrefix(previewApiUrl.value));
 
 const sanitizedMessage = computed(() => {
     const plainText = "Contents are shown as plain text.";
@@ -56,7 +58,13 @@ watch(
     () => props.datasetId,
     async () => {
         try {
-            const { headers } = await fetch(withPrefix(previewUrl.value), { method: "HEAD" });
+            const { response, error } = await GalaxyApi().GET(previewApiUrl.value as never, {
+                parseAs: "blob",
+            });
+            if (error) {
+                throw error;
+            }
+            const headers = response.headers;
             contentChunked.value = !!headers.get("x-content-chunked");
             contentTruncated.value = headers.get("x-content-truncated")
                 ? Number(headers.get("x-content-truncated"))

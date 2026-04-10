@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { useWindowScroll } from "@vueuse/core";
-import axios from "axios";
 import { parse } from "csv-parse/sync";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 
 import type { HDADetailed } from "@/api";
+import { GalaxyApi } from "@/api/client";
 import type { TableField } from "@/components/Common/GTable.types";
-import { getAppRoot } from "@/onload/loadConfig";
 
 import GTable from "@/components/Common/GTable.vue";
 
@@ -84,7 +83,7 @@ const delimiter = computed(() => {
 });
 
 const chunkUrl = computed(() => {
-    return `${getAppRoot()}dataset/display?dataset_id=${props.options.id}`;
+    return `/api/datasets/${props.options.id}/display`;
 });
 
 // Loading more data on user scroll to (near) bottom.
@@ -167,10 +166,12 @@ function processRow(row: string[]) {
 function nextChunk() {
     // Attempt to fetch next chunk, given the current offset.
     loading.value = true;
-    axios
-        .get(chunkUrl.value, {
+    GalaxyApi()
+        .GET(chunkUrl.value as never, {
             params: {
-                offset: offset.value,
+                query: {
+                    offset: offset.value,
+                },
             },
         })
         .then((response) => {

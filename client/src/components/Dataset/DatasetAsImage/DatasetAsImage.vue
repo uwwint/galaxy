@@ -3,8 +3,8 @@ import { computedAsync } from "@vueuse/core";
 import { BAlert, BImg } from "bootstrap-vue";
 import { computed, ref } from "vue";
 
-import { type PathDestination, useDatasetPathDestination } from "@/composables/datasetPathDestination";
-import { getAppRoot } from "@/onload/loadConfig";
+import { GalaxyApi } from "@/api/client";
+import { withPrefix } from "@/utils/redirect";
 
 interface Props {
     historyDatasetId: string;
@@ -12,29 +12,35 @@ interface Props {
     allowSizeToggle?: boolean;
 }
 
-const { datasetPathDestination } = useDatasetPathDestination();
-
 const props = withDefaults(defineProps<Props>(), {
     allowSizeToggle: false,
+    path: undefined,
 });
 
-const pathDestination = computedAsync<PathDestination | null>(async () => {
-    return await datasetPathDestination.value(props.historyDatasetId, props.path);
-}, null);
-
 const imageUrl = computed(() => {
-    if (props.path === undefined || props.path === "undefined") {
-        return `${getAppRoot()}dataset/display?dataset_id=${props.historyDatasetId}`;
+    if (!imageApiUrl.value) {
+        return null;
     }
-    return pathDestination.value?.fileLink;
+    return withPrefix(imageApiUrl.value);
+});
+
+const imageApiUrl = computed(() => {
+    if (props.path === undefined || props.path === "undefined") {
+        return `/api/datasets/${props.historyDatasetId}/display`;
+    }
+    return `/api/datasets/${props.historyDatasetId}/display?filename=${props.path}`;
 });
 
 const isImage = computedAsync(async () => {
-    if (!imageUrl.value) {
+    if (!imageApiUrl.value) {
         return null;
     }
-    const res = await fetch(imageUrl.value);
-    const buff = await res.blob();
+    const { data: buff, error } = await GalaxyApi().GET(imageApiUrl.value as never, {
+        parseAs: "blob",
+    });
+    if (error) {
+        return false;
+    }
     return buff.type.startsWith("image/");
 }, true);
 
@@ -50,8 +56,9 @@ const toggleFluid = () => {
         <BAlert v-if="!isImage" variant="warning" show>
             This dataset does not appear to be an image: {{ imageUrl }}.
         </BAlert>
-        <div
+        <button
             v-else
+            type="button"
             class="image-wrapper"
             :class="{ interactive: props.allowSizeToggle }"
             @click="props.allowSizeToggle ? toggleFluid() : null">
@@ -59,13 +66,16 @@ const toggleFluid = () => {
             <div v-if="props.allowSizeToggle" class="size-hint">
                 <small class="text-white">{{ isFluid ? "Click for actual size" : "Click to fit width" }}</small>
             </div>
-        </div>
+        </button>
     </div>
     <BAlert v-else variant="warning" show>Image not found: {{ imageUrl }}.</BAlert>
 </template>
 
 <style lang="scss" scoped>
 .image-wrapper {
+    background: transparent;
+    border: 0;
+    padding: 0;
     position: relative;
     display: inline-block;
 }
