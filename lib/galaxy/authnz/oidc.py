@@ -12,7 +12,13 @@ Specific providers (Keycloak, CILogon, etc.) should inherit from this class.
 """
 
 import logging
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
 
+import jwt
 from pkce import generate_pkce_pair
 from social_core.backends.open_id_connect import OpenIdConnectAuth
 
@@ -52,6 +58,21 @@ class GalaxyOpenIdConnect(OpenIdConnectAuth):
         - PKCE parameters (if enabled)
         """
         params = super().auth_params(state)
+        auth_session_id = self.strategy.session_get("galaxy_auth_session_id")
+        secret = self.setting("SECRET")
+        if state is not None and auth_session_id is not None and secret:
+            signed_state = jwt.encode(
+                {
+                    "sid": auth_session_id,
+                    "state": state,
+                    "iat": int(datetime.now(timezone.utc).timestamp()),
+                    "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
+                },
+                key=secret,
+                algorithm="HS256",
+            )
+            self.strategy.session_set(f"{self.name}_state", signed_state)
+            params["state"] = signed_state
 
         # Add PKCE parameters if enabled
         if self.PKCE_ENABLED:

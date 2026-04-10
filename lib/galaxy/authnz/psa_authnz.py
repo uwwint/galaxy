@@ -23,7 +23,6 @@ from sqlalchemy.exc import IntegrityError
 
 from galaxy import exceptions as galaxy_exceptions
 from galaxy.exceptions import MalformedContents
-from galaxy.managers import users as user_managers
 from galaxy.model import (
     PSAAssociation,
     PSACode,
@@ -302,6 +301,9 @@ class PSAAuthnz(IdentityProvider):
     def authenticate(self, trans, idphint=None) -> "HttpResponseProtocol":
         on_the_fly_config(trans.sa_session)
         strategy = Strategy(trans.request, trans.session, Storage, self.config)
+        current_auth_session = trans.auth_session
+        if current_auth_session is not None:
+            strategy.session_set("galaxy_auth_session_id", current_auth_session.id)
         backend = self._load_backend(strategy, self.config["redirect_uri"])
         backend.DEFAULT_SCOPE = backend.DEFAULT_SCOPE or []
         if (
@@ -325,16 +327,18 @@ class PSAAuthnz(IdentityProvider):
         self.config["GALAXY_TRANS"] = trans
         strategy = Strategy(trans.request, trans.session, Storage, self.config)
         strategy.session_set(f"{BACKENDS_NAME[self.config['provider']]}_state", state_token)
+        user = self._get_auth_session_user_from_state(trans, state_token)
         backend = self._load_backend(strategy, self.config["redirect_uri"])
+        backend.strategy.config["FIXED_DELEGATED_AUTH"] = self.config["FIXED_DELEGATED_AUTH"]
         redirect = do_complete(
             backend,
             login=lambda backend, user, social_user: self._login_user(backend, user, social_user),
-            user=trans.user,
+            user=user,
             state=state_token,
         )
         redirect_url = redirect.url if hasattr(redirect, "url") else redirect
 
-        user = self.config.get("user", None)
+        user = self.config.get("user", user)
 
         # Determine if this was a new association
         # The associate_by_email_if_logged_in pipeline step sets this flag based on whether
@@ -375,6 +379,31 @@ class PSAAuthnz(IdentityProvider):
                     redirect_url = f"{redirect_url}&email_exists={quote(email_exists)}"
 
         return redirect_url, user
+
+    def _get_auth_session_user_from_state(self, trans, state_token: str) -> User | None:
+        secret = self.config.get("SECRET")
+        if not secret:
+            return trans.user
+        try:
+            decoded_state = jwt.decode(
+                state_token,
+                key=secret,
+                algorithms=["HS256"],
+                options={"verify_aud": False, "verify_iss": False},
+            )
+        except jwt.PyJWTError:
+            return trans.user
+        auth_session_id = decoded_state.get("sid")
+        if auth_session_id is None:
+            return trans.user
+        try:
+            auth_session_id_int = int(auth_session_id)
+        except (TypeError, ValueError):
+            return trans.user
+        auth_session = trans.app.auth_session_manager.get_session_by_id(auth_session_id_int)
+        if auth_session is None:
+            return trans.user
+        return auth_session.user
 
     def disconnect(self, provider, trans, disconnect_redirect_url=None, email=None, association_id=None):
         on_the_fly_config(trans.sa_session)
@@ -753,14 +782,11 @@ def sync_user_profile(strategy=None, details=None, user=None, **kwargs):
     if not trans:
         log.debug("OIDC sync_user_profile skipped: no Galaxy transaction available.")
         return
-    if trans.app.config.enable_account_interface:
-        log.debug("OIDC sync_user_profile skipped: account interface enabled.")
-        return
     fixed_delegated_auth = strategy.config.get("FIXED_DELEGATED_AUTH", False)
     if not fixed_delegated_auth:
         log.debug("OIDC sync_user_profile skipped: fixed_delegated_auth disabled.")
         return
-    manager = getattr(trans.app, "user_manager", None) or user_managers.UserManager(trans.app)
+    manager = trans.app.user_manager
     updates: list[str] = []
     # Update email and keep private role in sync only when changed
     if details and details.get("email") and user.email != details["email"]:

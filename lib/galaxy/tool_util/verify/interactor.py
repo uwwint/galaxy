@@ -11,7 +11,6 @@ import traceback
 import urllib.parse
 import zipfile
 from json import dumps
-from logging import getLogger
 from typing import (
     Any,
     Callable,
@@ -81,8 +80,6 @@ from ._types import (
     ValueStateRepresentationT,
 )
 from .wait import wait_on
-
-log = getLogger(__name__)
 
 UseLegacyApiT = Literal["always", "never", "if_needed"]
 DEFAULT_USE_LEGACY_API: UseLegacyApiT = "always"
@@ -266,6 +263,7 @@ def raise_for_status(response: Response) -> None:
 class GalaxyInteractorApi:
     # api_key and cookies can also be manually set by UsesApiTestCaseMixin._different_user()
     api_key: Optional[str]
+    bearer_token: Optional[str]
     cookies: Optional[RequestsCookieJar]
     keep_outputs_dir: Optional[str]
 
@@ -276,6 +274,7 @@ class GalaxyInteractorApi:
         self.api_key = self._get_user_key(
             kwds.get("api_key"), kwds.get("master_api_key"), test_user=kwds.get("test_user")
         )
+        self.bearer_token = None
         if kwds.get("user_api_key_is_admin_key", False):
             self.master_api_key = self.api_key
         self.keep_outputs_dir = kwds.get("keep_outputs_dir", None)
@@ -1250,9 +1249,11 @@ class GalaxyInteractorApi:
     ) -> Dict[str, Optional[str]]:
         header = headers or {}
         if not anon:
-            if not key:
+            if self.bearer_token:
+                header["Authorization"] = f"Bearer {self.bearer_token}"
+            elif not key:
                 key = self.api_key if not admin else self.master_api_key
-            header["x-api-key"] = key
+                header["x-api-key"] = key
         return header
 
     def _post(

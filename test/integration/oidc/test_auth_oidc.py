@@ -186,6 +186,38 @@ class AbstractTestCases:
         def _get_interactor(self, api_key=None, allow_anonymous=False) -> "ApiTestInteractor":
             return super()._get_interactor(api_key=None, allow_anonymous=True)
 
+        def _bootstrap_galaxy_access_token(self, session: requests.Session) -> None:
+            self.galaxy_interactor.cookies = session.cookies
+            csrf_token = session.cookies.get("galaxy_refresh_csrf_token")
+            bootstrap_headers = {"X-CSRF-Token": csrf_token} if csrf_token else None
+            bootstrap_response = session.post(
+                self._api_url("../auth/bootstrap"),
+                headers=bootstrap_headers,
+            )
+            bootstrap_response.raise_for_status()
+            bootstrap_payload = bootstrap_response.json()
+            access_token = bootstrap_payload.get("access_token")
+            if isinstance(access_token, str):
+                session.headers["Authorization"] = f"Bearer {access_token}"
+                self.galaxy_interactor.bearer_token = access_token
+
+        def _set_bearer_token_from_auth_response(self, session: requests.Session, response: requests.Response) -> None:
+            response_payload = response.json()
+            access_token = response_payload.get("access_token")
+            if isinstance(access_token, str):
+                session.headers["Authorization"] = f"Bearer {access_token}"
+
+        def _oidc_redirect_target(self, response: requests.Response) -> parse.ParseResult:
+            parsed_url = parse.urlparse(response.url)
+            if parsed_url.path == "/login/callback":
+                redirect = parse.parse_qs(parsed_url.query).get("redirect", [None])[0]
+                if redirect:
+                    return parse.urlparse(parse.unquote(parse.unquote(redirect)))
+            return parsed_url
+
+        def _oidc_redirect_query_params(self, response: requests.Response) -> dict[str, list[str]]:
+            return parse.parse_qs(self._oidc_redirect_target(response).query)
+
         def _login_via_keycloak(self, username, password, expected_codes=None, save_cookies=False, session=None):
 
             if expected_codes is None:
@@ -195,12 +227,17 @@ class AbstractTestCases:
             provider_url = response.json()["redirect_uri"]
             response = session.get(provider_url, verify=False)
             matches = self.REGEX_KEYCLOAK_LOGIN_ACTION.search(response.text)
-            assert matches
-            auth_url = html.unescape(str(matches.group(1)))
-            response = session.post(auth_url, data={"username": username, "password": password}, verify=False)
+            if matches:
+                auth_url = html.unescape(str(matches.group(1)))
+                response = session.post(auth_url, data={"username": username, "password": password}, verify=False)
             assert response.status_code in expected_codes, response
-            if save_cookies:
-                self.galaxy_interactor.cookies = session.cookies
+            redirect_target = self._oidc_redirect_target(response)
+            if (
+                save_cookies
+                and "Authorization" not in session.headers
+                and "connect_external_provider" not in parse.parse_qs(redirect_target.query)
+            ):
+                self._bootstrap_galaxy_access_token(session)
             return session, response
 
 
@@ -253,8 +290,8 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
     def test_oidc_login_new_user(self):
         _, response = self._login_via_keycloak(KEYCLOAK_TEST_USERNAME, KEYCLOAK_TEST_PASSWORD, save_cookies=True)
         # Should have redirected back if auth succeeded
-        parsed_url = parse.urlparse(response.url)
-        notification = parse.parse_qs(parsed_url.query)["notification"][0]
+        query_params = self._oidc_redirect_query_params(response)
+        notification = query_params["notification"][0]
         assert "Your Keycloak identity has been linked to your Galaxy account." in notification
         response = self._get("users/current")
         self._assert_status_code_is(response, 200)
@@ -291,8 +328,7 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
 
         # Second login (repeat) - should NOT show notification
         _, response = self._login_via_keycloak(KEYCLOAK_TEST_USERNAME, KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-        parsed_url = parse.urlparse(response.url)
-        query_params = parse.parse_qs(parsed_url.query)
+        query_params = self._oidc_redirect_query_params(response)
         assert "notification" not in query_params, "Repeat login should not show 'linked' notification"
 
         # Verify user is still logged in
@@ -316,8 +352,8 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
         _, response = self._login_via_keycloak("gxyuser_existing", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
 
         # Should prompt user to associate accounts
-        parsed_url = parse.urlparse(response.url)
-        provider = parse.parse_qs(parsed_url.query)["connect_external_provider"][0]
+        query_params = self._oidc_redirect_query_params(response)
+        provider = query_params["connect_external_provider"][0]
         assert "keycloak" == provider
 
         # user should not have been logged in
@@ -359,6 +395,7 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
         )
         self._assert_status_code_is(response, 200)
         assert response.json()["message"] == "Success."
+        self._bootstrap_galaxy_access_token(session)
 
         response = session.get(self._api_url("users/current"))
         self._assert_status_code_is(response, 200)
@@ -370,22 +407,25 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
             "gxyuser_existing", KEYCLOAK_TEST_PASSWORD, save_cookies=True, session=session
         )
 
-        # Should now automatically associate account
-        parsed_url = parse.urlparse(response.url)
-        notification = parse.unquote(parse.unquote(parse.parse_qs(parsed_url.query)["redirect"][0]))
-        assert "Your Keycloak identity has been linked to your Galaxy account." in notification
+        # Should now automatically prompt to connect the external provider to the current Galaxy account
+        parsed_url = self._oidc_redirect_target(response)
+        query_params = parse.parse_qs(parsed_url.query)
+        assert "user/external_ids" in parsed_url.path or "user/external_ids" in response.url
+        assert query_params["notification"][0] == "Your Keycloak identity has been linked to your Galaxy account."
+        assert "email_exists" not in query_params
         response = session.get(self._api_url("users/current"))
         self._assert_status_code_is(response, 200)
         assert response.json()["email"] == "gxyuser_existing@galaxy.org"
         assert response.json()["username"] == "precreated_user"
 
         # Now that the accounts are associated, future logins through OIDC should just work
-        session, response = self._login_via_keycloak("gxyuser_existing", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
+        session, response = self._login_via_keycloak("gxyuser_existing", KEYCLOAK_TEST_PASSWORD, session=session)
 
-        # On repeat login, should NOT show the "linked" notification
-        parsed_url = parse.urlparse(response.url)
+        # On repeat login, we should now land on the root without a new linked notification.
+        parsed_url = self._oidc_redirect_target(response)
         query_params = parse.parse_qs(parsed_url.query)
         assert "notification" not in query_params, "Repeat login should not show 'linked' notification"
+        assert "user/external_ids" not in parsed_url.path
 
         response = session.get(self._api_url("users/current"))
         self._assert_status_code_is(response, 200)
@@ -403,8 +443,8 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
         response = session.get(response.json()["redirect_uri"], verify=False)
         # make sure we can no longer request the user
         response = session.get(self._api_url("users/current"))
-        self._assert_status_code_is(response, 200)
-        assert "email" not in response.json()
+        self._assert_status_code_is(response, 401)
+        assert "Galaxy access token session was not found" in response.json()["err_msg"]
 
     def test_auth_by_access_token_logged_in_once(self):
         # login at least once
@@ -541,7 +581,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
 
         # Should auto-associate and redirect to root (not user/external_ids)
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path, "Should redirect to root, not user/external_ids"
 
         # Should have notification about linking
@@ -571,7 +611,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
         _, response = self._login_via_keycloak("gxyuser_brand_new", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
 
         # Should create user and redirect to root
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path, "Should redirect to root for fixed_delegated_auth"
 
         # Verify user was created and logged in
@@ -586,18 +626,19 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
         """
         # Pre-create a Galaxy user with matching email but a different username
         sa_session = self._app.model.session
-        user = model.User(email="gxyuser_fixed_auth@galaxy.org", username="stale_username")
-        user.set_password_cleartext("test123")
-        sa_session.add(user)
-        try:
-            sa_session.commit()
-        except Exception:
-            pass
+        user = sa_session.query(model.User).filter_by(email="gxyuser_fixed_auth@galaxy.org").one_or_none()
+        if user is None:
+            user = model.User(email="gxyuser_fixed_auth@galaxy.org", username="stale_username")
+            user.set_password_cleartext("test123")
+            sa_session.add(user)
+        else:
+            user.username = "stale_username"
+        sa_session.commit()
 
         # Login via OIDC without being logged into Galaxy first (association)
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
 
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path
 
         # Verify user is logged in and username is updated to OIDC preferred username
@@ -628,7 +669,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
 
         # First login to associate
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path
 
         # Clear any existing profile notifications before checking the re-sync login behavior.
@@ -647,7 +688,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
 
         # Second login should re-sync username
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path
 
         response = self._get("users/current")
@@ -676,7 +717,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
 
         # First login applies username change from OIDC and creates one profile update notification.
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path
 
         notifications = self._get_profile_update_notifications()
@@ -690,7 +731,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
 
         # Second login with no local changes should not create a new profile update notification.
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path
         notifications = self._get_profile_update_notifications()
         assert len(notifications) == 0
@@ -703,7 +744,7 @@ class TestFixedDelegatedAuthIntegration(AbstractTestCases.BaseKeycloakIntegratio
         sa_session.commit()
 
         _, response = self._login_via_keycloak("gxyuser_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" not in parsed_url.path
         notifications = self._get_profile_update_notifications()
         assert len(notifications) == 1
@@ -767,7 +808,7 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
         _, response = self._login_via_keycloak("gxyuser_no_fixed_auth", KEYCLOAK_TEST_PASSWORD, save_cookies=False)
 
         # Should redirect to login/start with prompt
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "login/start" in parsed_url.path or "login/start" in response.url
 
         # Should have connect_external_provider parameters
@@ -793,7 +834,7 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
         _, response = self._login_via_keycloak("gxyuser_new_no_fixed", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
 
         # Should redirect to user/external_ids
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" in parsed_url.path or "user/external_ids" in response.url
 
         # Should have notification
@@ -840,6 +881,7 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
         )
         self._assert_status_code_is(response, 200)
         assert response.json()["message"] == "Success."
+        self._set_bearer_token_from_auth_response(session, response)
 
         # Verify we're logged in as User A
         response = session.get(self._api_url("users/current"))
@@ -857,7 +899,7 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
         )
 
         # Should redirect to user/external_ids with both notification and email_exists
-        parsed_url = parse.urlparse(response.url)
+        parsed_url = self._oidc_redirect_target(response)
         assert "user/external_ids" in parsed_url.path or "user/external_ids" in response.url
 
         # Should have notification

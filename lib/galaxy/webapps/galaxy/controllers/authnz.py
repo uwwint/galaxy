@@ -17,7 +17,6 @@ from galaxy import (
 from galaxy.util import url_get
 from galaxy.web import url_for
 from galaxy.webapps.base.controller import BaseUIController
-from ..api import auth as auth_api
 
 if TYPE_CHECKING:
     from galaxy.webapps.base.webapp import GalaxyWebTransaction
@@ -163,19 +162,12 @@ class OIDC(BaseUIController):
                 "identity provider. Please try again, and if the problem persists, "
                 "contact the Galaxy instance admin."
             )
-        auth_api.issue_browser_auth_for_user(trans, user)
+        trans.handle_user_login(user)
         # Record which idp provider was logged into, so we can logout of it later
         trans.set_cookie(value=provider, name=PROVIDER_COOKIE_NAME)
         # Clear the login next cookie back to default.
         trans.set_cookie(value="/", name=LOGIN_NEXT_COOKIE_NAME)
         callback_url = trans.url_builder("/login/callback", redirect=quote(redirect_url, safe=""))
-        log.debug(
-            "OIDC callback for provider %s and user %s redirecting to %s via %s",
-            provider,
-            user.email if user is not None else None,
-            redirect_url,
-            callback_url,
-        )
         return trans.response.send_redirect(callback_url)
 
     @web.expose
@@ -198,7 +190,7 @@ class OIDC(BaseUIController):
                 "identity provider. Please try again, and if the problem persists, "
                 "contact the Galaxy instance admin."
             )
-        auth_api.issue_browser_auth_for_user(trans, user)
+        trans.handle_user_login(user)
         # Record which idp provider was logged into, so we can logout of it later
         trans.set_cookie(value=provider, name=PROVIDER_COOKIE_NAME)
         if redirect_url is None:
