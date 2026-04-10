@@ -7,7 +7,9 @@ from .framework import (
 class TestLogin(SeleniumTestCase):
     @selenium_test
     def test_login_accessibility(self):
+        self.logout_if_needed()
         self.home()
+        self.components.masthead.login_masthead_button.wait_for_visible()
         self.components.masthead.login_masthead_button.wait_for_and_click()
         login = self.components.login
         login.form.assert_no_axe_violations_with_impact_of_at_least("moderate")

@@ -41,6 +41,10 @@ if TYPE_CHECKING:
 
     from .has_playwright_driver import HasPlaywrightDriver
 
+from galaxy.managers.auth_sessions import (
+    AUTH_SESSION_COOKIE_NAME,
+    AUTH_SESSION_CSRF_COOKIE_NAME,
+)
 from galaxy.navigation.components import (
     Component,
     HasText,
@@ -373,6 +377,10 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
 
     def wait_for_masthead(self):
         self.components.masthead._.wait_for_visible()
+        if self.is_logged_in():
+            self.components.masthead.logged_in_only.wait_for_visible()
+        else:
+            self.components.masthead.login_masthead_button.wait_for_present()
 
     def go_to_workflow_landing(self, uuid: str, public: Literal["false", "true"], client_secret: Optional[str]):
         path = f"workflow_landings/{uuid}?public={public}"
@@ -463,7 +471,11 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         data = data or {}
         full_url = self.build_url(f"api/{endpoint}", for_selenium=False)
         response = requests.get(
-            full_url, data=data, cookies=self.selenium_to_requests_cookies(), timeout=DEFAULT_SOCKET_TIMEOUT
+            full_url,
+            data=data,
+            cookies=self.selenium_to_requests_cookies(),
+            headers=self.selenium_to_requests_headers(),
+            timeout=DEFAULT_SOCKET_TIMEOUT,
         )
         return self._handle_response(response, raw)
 
@@ -471,14 +483,21 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         data = data or {}
         full_url = self.build_url(f"api/{endpoint}", for_selenium=False)
         response = requests.post(
-            full_url, data=data, cookies=self.selenium_to_requests_cookies(), timeout=DEFAULT_SOCKET_TIMEOUT
+            full_url,
+            data=data,
+            cookies=self.selenium_to_requests_cookies(),
+            headers=self.selenium_to_requests_headers(),
+            timeout=DEFAULT_SOCKET_TIMEOUT,
         )
         return response.json()
 
     def api_delete(self, endpoint, raw=False):
         full_url = self.build_url(f"api/{endpoint}", for_selenium=False)
         response = requests.delete(
-            full_url, cookies=self.selenium_to_requests_cookies(), timeout=DEFAULT_SOCKET_TIMEOUT
+            full_url,
+            cookies=self.selenium_to_requests_cookies(),
+            headers=self.selenium_to_requests_headers(),
+            timeout=DEFAULT_SOCKET_TIMEOUT,
         )
         return self._handle_response(response, raw)
 
@@ -488,13 +507,46 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         else:
             return response.json() if response.content else None
 
-    def get_galaxy_session(self):
+    def get_refresh_token(self) -> Optional[str]:
         for cookie in self.get_cookies():
-            if cookie["name"] == "galaxysession":
+            if cookie["name"] == AUTH_SESSION_COOKIE_NAME:
                 return cookie["value"]
+        return None
 
-    def selenium_to_requests_cookies(self):
-        return {"galaxysession": self.get_galaxy_session()}
+    def selenium_to_requests_cookies(self) -> dict[str, str]:
+        refresh_token = self.get_refresh_token()
+        if refresh_token is None:
+            return {}
+        return {AUTH_SESSION_COOKIE_NAME: refresh_token}
+
+    def get_refresh_csrf_token(self) -> Optional[str]:
+        for cookie in self.get_cookies():
+            if cookie["name"] == AUTH_SESSION_CSRF_COOKIE_NAME:
+                return cookie["value"]
+        return None
+
+    def get_access_token(self) -> Optional[str]:
+        for cookie in self.get_cookies():
+            if cookie["name"] == "galaxy_debug_access_token":
+                token = cookie["value"]
+                if token:
+                    return token
+        token = self.execute_script(
+            "return window.localStorage?.getItem('galaxy:debug:access_token') ?? window.__GALAXY_TEST_ACCESS_TOKEN__ ?? null;"
+        )
+        if isinstance(token, str) and token:
+            return token
+        return None
+
+    def selenium_to_requests_headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {}
+        access_token = self.get_access_token()
+        if access_token is not None:
+            headers["Authorization"] = f"Bearer {access_token}"
+        csrf_token = self.get_refresh_csrf_token()
+        if csrf_token is not None:
+            headers["X-CSRF-Token"] = csrf_token
+        return headers
 
     def history_panel_name_element(self):
         component = self.history_element("name display")
@@ -1637,9 +1689,10 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         self.components.shared_histories.shared_tab.wait_for_and_click()
 
     def navigate_to_user_preferences(self):
-        self.home()
+        self.wait_for_logged_in()
         self.components.masthead.user.wait_for_and_click()
         self.components.masthead.preferences.wait_for_and_click()
+        self.components.preferences.change_password.wait_for_present()
 
     def navigate_to_invocations_grid(self):
         self.home()
