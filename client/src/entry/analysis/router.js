@@ -1,7 +1,6 @@
 import Vue from "vue";
 import VueRouter from "vue-router";
 
-import { getGalaxyInstance } from "@/app";
 import { HistoryExport } from "@/components/HistoryExport/index";
 import { APIKey } from "@/components/User/APIKey";
 import { ExternalIdentities } from "@/components/User/ExternalIdentities";
@@ -12,6 +11,7 @@ import StorageRoutes from "@/entry/analysis/routes/storage-routes";
 import { getAppRoot } from "@/onload/loadConfig";
 import { requireAuth } from "@/router/guards";
 import { useAuthStore } from "@/stores/authStore";
+import { useUserStore } from "@/stores/userStore";
 import { parseBool } from "@/utils/utils";
 
 import { patchRouterPush } from "./router-push";
@@ -929,38 +929,38 @@ export function getRouter(Galaxy) {
         ],
     });
 
-    function checkAdminAccessRequired(to) {
+    function checkAdminAccessRequired(to, userStore) {
         // Check parent route hierarchy to see if we require admin access here.
         // Access is required if *any* component in the hierarchy requires it.
         if (to.matched.some((record) => record.meta.requiresAdmin === true)) {
-            const isAdmin = getGalaxyInstance()?.user?.isAdmin();
-            return !isAdmin;
+            return !userStore.isAdmin;
         }
         return false;
     }
 
-    function checkRegisteredUserAccessRequired(to) {
+    function checkRegisteredUserAccessRequired(to, userStore) {
         // Check parent route hierarchy to see if we require registered user access here.
         // Access is required if *any* component in the hierarchy requires it.
         if (to.matched.some((record) => record.meta.requiresRegisteredUser === true)) {
-            const isAnonymous = getGalaxyInstance()?.user?.isAnonymous();
-            return isAnonymous;
+            return userStore.isAnonymous;
         }
         return false;
     }
 
     router.beforeEach(async (to, from, next) => {
         const authStore = useAuthStore();
+        const userStore = useUserStore();
         await authStore.ensureBootstrap().catch(() => undefined);
+        await userStore.loadUser(false).catch(() => undefined);
 
-        const isAdminAccessRequired = checkAdminAccessRequired(to);
+        const isAdminAccessRequired = checkAdminAccessRequired(to, userStore);
         if (isAdminAccessRequired) {
             const error = new Error(`Admin access required for '${to.path}'.`);
             error.name = "AdminRequired";
             next(error);
         }
 
-        const isRegisteredUserAccessRequired = checkRegisteredUserAccessRequired(to);
+        const isRegisteredUserAccessRequired = checkRegisteredUserAccessRequired(to, userStore);
         if (isRegisteredUserAccessRequired) {
             const error = new Error(`Registered user access required for '${to.path}'.`);
             error.name = "RegisteredUserRequired";

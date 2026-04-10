@@ -11,8 +11,19 @@ const authStore = {
     isAuthenticated: false,
 };
 
+const loadUser = vi.fn();
+const userStore = {
+    isAdmin: false,
+    isAnonymous: true,
+    loadUser,
+};
+
 vi.mock("@/stores/authStore", () => ({
     useAuthStore: () => authStore,
+}));
+
+vi.mock("@/stores/userStore", () => ({
+    useUserStore: () => userStore,
 }));
 
 vi.mock("vue-router", () => {
@@ -118,10 +129,15 @@ function findRoute(routes: Array<{ children?: Array<{ children?: unknown[]; path
 describe("analysis router", () => {
     beforeEach(() => {
         ensureBootstrap.mockReset();
+        ensureBootstrap.mockResolvedValue(undefined);
+        loadUser.mockReset();
+        loadUser.mockResolvedValue(undefined);
         authStore.accessToken = null;
         authStore.bootstrapStatus = "ready";
         authStore.effectiveUser = null;
         authStore.isAuthenticated = false;
+        userStore.isAdmin = false;
+        userStore.isAnonymous = true;
         installLocalStorage();
     });
 
@@ -143,6 +159,33 @@ describe("analysis router", () => {
         authStore.isAuthenticated = true;
         expect((loginRoute as { redirect?: () => string | undefined }).redirect?.()).toBe("/");
         expect((registerRoute as { redirect?: () => string | undefined }).redirect?.()).toBe("/");
+    });
+
+    it("hydrates the user store before evaluating route access requirements", async () => {
+        const getRouter = await loadRouter();
+        const router = getRouter(buildGalaxy());
+        const beforeEachHook = router.beforeHooks[0] as (
+            to: { path: string; fullPath: string; matched: Array<{ meta?: { requiresAdmin?: boolean; requiresRegisteredUser?: boolean } }> },
+            from: unknown,
+            next: (location?: string | { path: string; query?: Record<string, string> }) => void,
+        ) => Promise<void>;
+        const next = vi.fn();
+
+        userStore.isAdmin = true;
+        userStore.isAnonymous = false;
+
+        await beforeEachHook(
+            {
+                path: "/admin",
+                fullPath: "/admin",
+                matched: [{ meta: { requiresAdmin: true } }],
+            },
+            null,
+            next,
+        );
+
+        expect(loadUser).toHaveBeenCalledWith(false);
+        expect(next).toHaveBeenCalledWith();
     });
 
     it("waits for auth bootstrap before continuing navigation", async () => {
