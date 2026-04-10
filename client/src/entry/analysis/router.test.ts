@@ -145,7 +145,7 @@ describe("analysis router", () => {
         expect((registerRoute as { redirect?: () => string | undefined }).redirect?.()).toBe("/");
     });
 
-    it("waits for auth bootstrap before deciding login-start routing", async () => {
+    it("waits for auth bootstrap before continuing navigation", async () => {
         const deferred = createDeferred<void>();
         ensureBootstrap.mockReturnValue(deferred.promise);
 
@@ -157,16 +157,15 @@ describe("analysis router", () => {
             next: (location?: string | { path: string; query?: Record<string, string> }) => void,
         ) => Promise<void>;
         const next = vi.fn();
-        const navigation = beforeEachHook({ path: "/login/start", fullPath: "/login/start" }, null, next);
+        const navigation = beforeEachHook({ path: "/", fullPath: "/", matched: [] }, null, next);
 
         await Promise.resolve();
         expect(next).not.toHaveBeenCalled();
 
-        authStore.isAuthenticated = true;
         deferred.resolve();
         await deferred.promise;
         await navigation;
 
-        expect(next).toHaveBeenCalledWith("/");
+        expect(next).toHaveBeenCalledWith();
     });
 });

@@ -953,13 +953,6 @@ export function getRouter(Galaxy) {
         const authStore = useAuthStore();
         await authStore.ensureBootstrap().catch(() => undefined);
 
-        if (to.path === "/login/start" || to.path === "/register/start") {
-            if (authStore.isAuthenticated) {
-                next("/");
-                return;
-            }
-        }
-
         const isAdminAccessRequired = checkAdminAccessRequired(to);
         if (isAdminAccessRequired) {
             const error = new Error(`Admin access required for '${to.path}'.`);

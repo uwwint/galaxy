@@ -326,6 +326,7 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
     # set to True to reload each invocation (good for interactive test building)
     _interactive_components: bool = False
     _root_component: Component = load_root_component()
+    _selenium_access_token_cache: Optional[str] = None
 
     def get(self, url: str = ""):
         """Expand supplied relative URL and navigate to page using Selenium driver."""
@@ -526,17 +527,30 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         return None
 
     def get_access_token(self) -> Optional[str]:
-        for cookie in self.get_cookies():
-            if cookie["name"] == "galaxy_debug_access_token":
-                token = cookie["value"]
-                if token:
-                    return token
-        token = self.execute_script(
-            "return window.localStorage?.getItem('galaxy:debug:access_token') ?? window.__GALAXY_TEST_ACCESS_TOKEN__ ?? null;"
+        if self._selenium_access_token_cache is not None:
+            return self._selenium_access_token_cache
+        refresh_token = self.get_refresh_token()
+        if refresh_token is None:
+            self._selenium_access_token_cache = None
+            return None
+        refresh_csrf_token = self.get_refresh_csrf_token()
+        if refresh_csrf_token is None:
+            self._selenium_access_token_cache = None
+            return None
+        response = requests.post(
+            self.build_url("auth/bootstrap", for_selenium=False),
+            cookies=self.selenium_to_requests_cookies(),
+            headers={"X-CSRF-Token": refresh_csrf_token},
+            timeout=DEFAULT_SOCKET_TIMEOUT,
         )
-        if isinstance(token, str) and token:
-            return token
-        return None
+        if not response.ok:
+            return None
+        access_token = response.json().get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            self._selenium_access_token_cache = None
+            return None
+        self._selenium_access_token_cache = access_token
+        return access_token
 
     def selenium_to_requests_headers(self) -> dict[str, str]:
         headers: dict[str, str] = {}

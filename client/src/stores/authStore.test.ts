@@ -47,24 +47,12 @@ function installCookieJar() {
     });
 }
 
-function setDebugLocalStorage(enabled: boolean) {
-    Object.defineProperty(window, "localStorage", {
-        configurable: true,
-        value: {
-            getItem: vi.fn((key: string) => (key === "galaxy:debug" ? String(enabled) : null)),
-            setItem: vi.fn(),
-            removeItem: vi.fn(),
-        },
-    });
-}
-
 describe("authStore", () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         vi.mocked(axios.post).mockReset();
         installCookieJar();
         setVisibilityState("visible");
-        setDebugLocalStorage(false);
     });
 
     afterEach(() => {
@@ -513,27 +501,5 @@ describe("authStore", () => {
         await authStore.bootstrap();
 
         expect(authStore.isImpersonating).toBe(true);
-    });
-
-    it("exposes the Selenium debug access token when debug localStorage is enabled", async () => {
-        setDebugLocalStorage(true);
-        document.cookie = "galaxy_refresh_csrf_token=csrf-token";
-        const accessToken = makeAccessToken();
-        vi.mocked(axios.post).mockResolvedValue({
-            data: {
-                access_token: accessToken,
-                actor_user: null,
-                auth_source: "galaxy_token",
-                authenticated: true,
-                current_history_id: null,
-                user: null,
-            },
-        });
-
-        const authStore = useAuthStore();
-        await authStore.bootstrap();
-
-        expect(document.cookie).toContain("galaxy_debug_access_token=");
-        expect(window.__GALAXY_TEST_ACCESS_TOKEN__).toBe(accessToken);
     });
 });

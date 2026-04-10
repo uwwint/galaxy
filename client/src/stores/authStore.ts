@@ -45,12 +45,6 @@ interface RegisterPayload {
 
 const REFRESH_SKEW_MS = 30_000;
 const AUTH_REFRESH_CSRF_COOKIE_NAME = "galaxy_refresh_csrf_token";
-const SELENIUM_DEBUG_LOCAL_STORAGE_KEY = "galaxy:debug";
-const SELENIUM_ACCESS_TOKEN_COOKIE_NAME = "galaxy_debug_access_token";
-
-interface WindowWithSeleniumAuthToken extends Window {
-    __GALAXY_TEST_ACCESS_TOKEN__?: string | null;
-}
 
 function decodeBase64Url(value: string): string {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -86,25 +80,6 @@ function readCookieValue(name: string): string | null {
     const escapedName = name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1");
     const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
     return match ? decodeURIComponent(match[1]) : null;
-}
-
-function shouldExposeTestAccessToken(): boolean {
-    if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") {
-        return false;
-    }
-    return window.localStorage.getItem(SELENIUM_DEBUG_LOCAL_STORAGE_KEY) === "true";
-}
-
-function setTestAccessToken(accessToken: string | null) {
-    if (!shouldExposeTestAccessToken()) {
-        return;
-    }
-    if (typeof window.localStorage?.setItem === "function") {
-        const cookieValue = accessToken === null ? "" : accessToken;
-        const maxAge = accessToken === null ? 0 : 3600;
-        document.cookie = `${SELENIUM_ACCESS_TOKEN_COOKIE_NAME}=${cookieValue}; path=/; max-age=${maxAge}; samesite=lax`;
-    }
-    (window as WindowWithSeleniumAuthToken).__GALAXY_TEST_ACCESS_TOKEN__ = accessToken;
 }
 
 export const useAuthStore = defineStore("authStore", () => {
@@ -156,7 +131,6 @@ export const useAuthStore = defineStore("authStore", () => {
         actorUser.value = null;
         currentHistoryId.value = null;
         syncGalaxyUser(null);
-        setTestAccessToken(null);
         clearRefreshTimer();
         resetBootstrapState();
         notifyAuthStateChanged();
@@ -200,9 +174,6 @@ export const useAuthStore = defineStore("authStore", () => {
         actorUser.value = payload.actor_user;
         currentHistoryId.value = payload.current_history_id;
         syncGalaxyUser(payload.user);
-        if (payload.authenticated) {
-            setTestAccessToken(payload.access_token);
-        }
         if (payload.authenticated && payload.access_token) {
             scheduleRefresh();
         } else {
