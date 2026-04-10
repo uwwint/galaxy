@@ -3,8 +3,6 @@ import flushPromises from "flush-promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reactive, ref } from "vue";
 
-import App from "./App.vue";
-
 const ensureBootstrap = vi.fn();
 const clearAuthState = vi.fn();
 const resetUserStore = vi.fn();
@@ -136,7 +134,8 @@ vi.mock("@/stores/tourStore", () => ({
     useTourStore: () => tourStore,
 }));
 
-function mountApp() {
+async function mountApp() {
+    const { default: App } = await import("./App.vue");
     return mount(App as object, {
         mocks: {
             $route: {
@@ -180,7 +179,7 @@ describe("App", () => {
     it("boots auth without starting history polling at app startup", async () => {
         ensureBootstrap.mockResolvedValue(undefined);
 
-        mountApp();
+        await mountApp();
         await flushPromises();
 
         expect(ensureBootstrap).toHaveBeenCalledTimes(1);
@@ -192,7 +191,7 @@ describe("App", () => {
     it("clears auth and user state when embedded", async () => {
         embedded = true;
 
-        mountApp();
+        await mountApp();
         await flushPromises();
 
         expect(clearAuthState).toHaveBeenCalledTimes(1);
