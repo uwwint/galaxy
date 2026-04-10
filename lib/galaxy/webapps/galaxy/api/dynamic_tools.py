@@ -65,7 +65,7 @@ class UnprivilegedToolsApi:
     # and is scoped to to individual user and never adds to global toolbox
     dynamic_tools_manager: DynamicToolManager = depends(DynamicToolManager)
 
-    @router.get("/api/unprivileged_tools", response_model_exclude_defaults=True)
+    @router.get("/api/unprivileged_tools", public=True, response_model_exclude_defaults=True)
     def index(self, active: bool = True, trans: ProvidesUserContext = DependsOnTrans) -> list[UnprivilegedToolResponse]:
         if not trans.user:
             return []

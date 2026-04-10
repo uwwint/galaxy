@@ -175,7 +175,7 @@ def get_auth_session_from_bearer_token(
     try:
         return auth_session_manager.get_session_for_access_token(bearer_token.credentials)
     except AuthenticationFailed:
-        raise
+        return None
 
 
 def get_api_user(
@@ -190,7 +190,10 @@ def get_api_user(
     elif bearer_token:
         if bearer_auth_session is not None:
             return None
-        user = user_manager.by_oidc_access_token(access_token=bearer_token.credentials)
+        try:
+            user = user_manager.by_oidc_access_token(access_token=bearer_token.credentials)
+        except AuthenticationFailed:
+            return None
     else:
         return None
     return user

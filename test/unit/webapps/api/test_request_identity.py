@@ -53,6 +53,24 @@ def _build_auth_context_app():
     return app
 
 
+def _build_public_auth_context_app():
+    app = FastAPI()
+    add_request_id_middleware(app)
+    router = APIRouter()
+
+    @router.get("/api/test/public-auth-context")
+    def public_auth_context(trans=DependsOnTrans):
+        return {
+            "auth_session_id": trans.auth_session.id if trans.auth_session else None,
+            "auth_source": trans.auth_source,
+            "actor_user_id": trans.actor_user.id if trans.actor_user else None,
+            "user_id": trans.user.id if trans.user else None,
+        }
+
+    app.include_router(router)
+    return app
+
+
 def test_work_request_context_defaults_actor_user_to_effective_user():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]
@@ -178,6 +196,33 @@ def test_galaxy_access_token_builds_auth_context_on_real_fastapi_request(monkeyp
     }
 
 
+def test_invalid_galaxy_bearer_token_still_allows_public_auth_context_request(monkeypatch, tmp_path):
+    db_path = tmp_path / "galaxy.sqlite"
+    config = galaxy_mock.MockAppConfig(root=str(tmp_path), database_connection=f"sqlite:///{db_path}")
+    mock_app = galaxy_mock.MockApp(config=config)
+    user_manager = mock_app[UserManager]
+    user = user_manager.create(email="user1@example.org", username="user1", password="password")
+    _, access_token = _make_galaxy_access_token(mock_app, user)
+    invalid_access_token = f"{access_token.rsplit('.', 1)[0]}.invalidsignature"
+    mock_app.model.session.commit()
+    monkeypatch.setattr(galaxy_app_module, "app", mock_app)
+    test_app = _build_public_auth_context_app()
+
+    with TestClient(test_app) as client:
+        response = client.get(
+            "/api/test/public-auth-context",
+            headers={"Authorization": f"Bearer {invalid_access_token}"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "auth_session_id": None,
+        "auth_source": "anonymous",
+        "actor_user_id": None,
+        "user_id": None,
+    }
+
+
 def test_invalid_galaxy_bearer_token_does_not_fall_through_to_external_oidc():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]
@@ -185,11 +230,30 @@ def test_invalid_galaxy_bearer_token_does_not_fall_through_to_external_oidc():
     _, access_token = _make_galaxy_access_token(app, user)
     invalid_access_token = f"{access_token.rsplit('.', 1)[0]}.invalidsignature"
 
-    with pytest.raises(exceptions.AuthenticationFailed):
-        get_auth_session_from_bearer_token(
-            auth_session_manager=app.auth_session_manager,
-            bearer_token=HTTPAuthorizationCredentials(scheme="Bearer", credentials=invalid_access_token),
-        )
+    resolved_auth_session = get_auth_session_from_bearer_token(
+        auth_session_manager=app.auth_session_manager,
+        bearer_token=HTTPAuthorizationCredentials(scheme="Bearer", credentials=invalid_access_token),
+    )
+
+    assert resolved_auth_session is None
+
+
+def test_invalid_galaxy_bearer_token_is_treated_as_anonymous_api_user():
+    app = galaxy_mock.MockApp()
+    user_manager = app[UserManager]
+    user = user_manager.create(email="user1@example.org", username="user1", password="password")
+    _, access_token = _make_galaxy_access_token(app, user)
+    invalid_access_token = f"{access_token.rsplit('.', 1)[0]}.invalidsignature"
+
+    resolved_user = get_api_user(
+        user_manager=user_manager,
+        bearer_auth_session=None,
+        key=None,
+        x_api_key=None,
+        bearer_token=HTTPAuthorizationCredentials(scheme="Bearer", credentials=invalid_access_token),
+    )
+
+    assert resolved_user is None
 
 
 def test_refresh_cookie_resolves_auth_session():
