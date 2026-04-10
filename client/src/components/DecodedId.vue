@@ -6,6 +6,7 @@ import axios from "axios";
 
 import { getGalaxyInstance } from "@/app";
 import { getAppRoot } from "@/onload/loadConfig";
+import { useUserStore } from "@/stores/userStore";
 import { rethrowSimple } from "@/utils/simple-error";
 
 export default {
@@ -21,8 +22,9 @@ export default {
     computed: {
         isAdmin() {
             // window.parent.Galaxy is needed when instance is mounted in mako
-            const Galaxy = getGalaxyInstance() || window.parent.Galaxy;
-            return Galaxy?.user?.isAdmin() || false;
+            const userStore = useUserStore();
+            const galaxy = getGalaxyInstance() || window.parent.Galaxy;
+            return userStore.isAdmin || galaxy?.user?.isAdmin() || false;
         },
     },
     created: function () {

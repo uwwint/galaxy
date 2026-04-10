@@ -2,6 +2,8 @@ import * as Sentry from "@sentry/vue";
 import Vue from "vue";
 import type VueRouter from "vue-router";
 
+import { useUserStore } from "@/stores/userStore";
+
 interface GalaxyConfig {
     sentry_dsn_public?: string;
     sentry_client_traces_sample_rate?: number;
@@ -43,13 +45,15 @@ export function initSentry(Galaxy: GalaxyInstance, router: VueRouter): void {
         return;
     }
 
-    const email = Galaxy.user?.get("email");
+    const userStore = useUserStore();
+    const currentUser = userStore.currentUser;
+    const email = currentUser?.email;
     let release = config.version_major;
     if (config.version_minor) {
         release += `.${config.version_minor}`;
     }
 
-    const replayEnabled = isReplayEnabled(Galaxy.user);
+    const replayEnabled = isReplayEnabled(currentUser);
     const integrations = [Sentry.browserTracingIntegration({ router })];
     if (replayEnabled) {
         integrations.push(
