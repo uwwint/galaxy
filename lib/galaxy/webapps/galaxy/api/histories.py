@@ -13,6 +13,7 @@ from typing import (
     Union,
 )
 
+from dateutil.parser import isoparse
 from fastapi import (
     Body,
     Depends,
@@ -25,6 +26,7 @@ from fastapi import (
 from pydantic.fields import Field
 from pydantic.main import BaseModel
 
+from galaxy.exceptions import AuthenticationFailed
 from galaxy.managers.context import (
     ProvidesHistoryContext,
     ProvidesUserContext,
@@ -251,6 +253,26 @@ class FastAPIHistories:
         return self.service.count(trans)
 
     @router.get(
+        "/api/histories/current",
+        summary="Returns the current user's current history.",
+        response_model=None,
+        response_model_exclude_unset=True,
+    )
+    def current(
+        self,
+        trans: ProvidesHistoryContext = DependsOnTrans,
+        serialization_params: SerializationParams = Depends(query_serialization_params),
+        since: Optional[str] = Query(default=None),
+    ) -> AnyHistoryView | Response:
+        if trans.auth_session is None:
+            raise AuthenticationFailed("A browser auth session is required to access the current history.")
+        history = trans.get_history(most_recent=True, create=True)
+        if since:
+            if history.update_time <= isoparse(since):
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return self.service._serialize_history(trans, history, serialization_params)
+
+    @router.get(
         "/api/histories/deleted",
         summary="Returns deleted histories for the current user.",
         response_model_exclude_unset=True,
@@ -416,6 +438,20 @@ class FastAPIHistories:
         if payload_as_json:
             payload = CreateHistoryPayload.model_validate(payload_as_json)
         return self.service.create(trans, payload, serialization_params)
+
+    @router.put(
+        "/api/histories/current/{history_id}",
+        summary="Sets the current history for the current user.",
+        response_model_exclude_unset=True,
+    )
+    def set_current(
+        self,
+        history_id: HistoryIDPathParam,
+        trans: ProvidesHistoryContext = DependsOnTrans,
+        serialization_params: SerializationParams = Depends(query_serialization_params),
+    ) -> AnyHistoryView:
+        history = self.service.manager.set_current_by_id(trans, history_id)
+        return self.service._serialize_history(trans, history, serialization_params)
 
     @router.delete(
         "/api/histories/{history_id}",

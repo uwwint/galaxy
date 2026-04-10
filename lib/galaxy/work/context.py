@@ -6,9 +6,12 @@ from typing import (
     TYPE_CHECKING,
 )
 
+from sqlalchemy import select
 from starlette.datastructures import URL
 
+from galaxy import util
 from galaxy.managers.context import ProvidesHistoryContext
+from galaxy.model import History
 
 if TYPE_CHECKING:
     from galaxy.model import (
@@ -75,8 +78,15 @@ class WorkRequestContext(ProvidesHistoryContext):
     def url_builder(self):
         return self._url_builder
 
-    def get_history(self, create=False):
-        return self.__history
+    def get_history(self, create=False, most_recent=False):
+        history = self.__history
+        if history is None and self.auth_session is not None:
+            history = self.auth_session.current_history
+        if history is None and most_recent:
+            history = self.get_most_recent_history()
+        if history is None and util.string_as_bool(create):
+            history = self.get_or_create_default_history()
+        return history
 
     @property
     def history(self):
@@ -99,6 +109,58 @@ class WorkRequestContext(ProvidesHistoryContext):
 
     def get_galaxy_session(self):
         return self.galaxy_session
+
+    def set_history(self, history):
+        if history and not history.deleted and self.auth_session:
+            self.auth_session.current_history = history
+            self.sa_session.add(self.auth_session)
+        self.sa_session.commit()
+
+    def get_or_create_default_history(self):
+        """Gets or creates a default history and associates it with the current session."""
+        assert self.auth_session
+
+        history = self.auth_session.current_history
+        if history and not history.deleted:
+            return history
+
+        if user := self.auth_session.user:
+            stmt = select(History).filter_by(user=user, name=History.default_name, deleted=False)
+            unnamed_histories = self.sa_session.scalars(stmt)
+            for history in unnamed_histories:
+                if history.empty:
+                    self.set_history(history)
+                    return history
+
+        if self.app.config.get("require_login", False) and not self.user:
+            return None
+
+        return self.new_history()
+
+    def get_most_recent_history(self):
+        """Return the most recently updated history for the current user."""
+        user = self.get_user()
+        if not user:
+            return None
+        stmt = select(History).filter_by(user=user, deleted=False).order_by(History.update_time.desc()).limit(1)
+        recent_history = self.sa_session.scalars(stmt).first()
+        if recent_history is not None:
+            self.set_history(recent_history)
+        return recent_history
+
+    def new_history(self, name: Optional[str] = None) -> History:
+        """Create a new history and associate it with the current session."""
+        history = History()
+        if name:
+            history.name = name
+        self.auth_session.current_history = history
+        if self.auth_session.user:
+            history.user = self.auth_session.user
+        history.genome_build = self.app.genome_builds.default_value
+        self.app.security_agent.history_set_default_permissions(history)
+        self.sa_session.add_all((self.auth_session, history))
+        self.sa_session.commit()
+        return history
 
     def set_user(self, user):
         """Set the current user."""

@@ -369,12 +369,15 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         time.sleep(duration)
 
     def home(self) -> None:
-        """Return to root Galaxy page and wait for some basic widgets to appear."""
+        """Return to root Galaxy page and wait for the app shell to appear."""
         self.get()
         try:
-            self.wait_for_masthead()
+            self.wait_for_galaxy_shell()
         except SeleniumTimeoutException as e:
             raise ClientBuildException(e)
+
+    def wait_for_galaxy_shell(self) -> None:
+        self.components._.center_panel.wait_for_visible()
 
     def wait_for_masthead(self):
         self.components.masthead._.wait_for_visible()
@@ -999,8 +1002,7 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
         return "".join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(len))
 
     def submit_login(self, email, password=None, assert_valid=True, retries=0):
-        self.components.masthead.login_masthead_button.wait_for_and_click()
-        self.sleep_for(WAIT_TYPES.UX_RENDER)
+        self.navigate_to(self.build_url("login/start"))
         self.fill_login_and_submit(email, password=password)
         if assert_valid:
             try:
@@ -1037,9 +1039,8 @@ class NavigatesGalaxy(HasDriverProxy[WaitType]):
             username = email.split("@")[0]
 
         self.home()
-        self.components.masthead.login_masthead_button.wait_for_and_click()
+        self.navigate_to(self.build_url("register/start"))
         registration = self.components.registration
-        registration.toggle.wait_for_and_click()
         form = registration.form.wait_for_visible()
         self.fill(form, dict(email=email, password=password, username=username, confirm=confirm))
         registration.submit.wait_for_and_click()
@@ -3230,5 +3231,8 @@ class NotLoggedInException(SeleniumTimeoutException):
 
 class ClientBuildException(SeleniumTimeoutException):
     def __init__(self, timeout_exception: SeleniumTimeoutException):
-        msg = f"Error waiting for Galaxy masthead to appear, this frequently means there is a problem with the client build and the Galaxy client is broken. {timeout_exception.msg}"
+        msg = (
+            "Error waiting for the Galaxy app shell to appear, this frequently means there is a problem "
+            f"with the client build and the Galaxy client is broken. {timeout_exception.msg}"
+        )
         super().__init__(msg=msg, screen=timeout_exception.screen, stacktrace=timeout_exception.stacktrace)

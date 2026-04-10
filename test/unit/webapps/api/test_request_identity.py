@@ -120,6 +120,18 @@ def test_work_request_context_uses_auth_session_user():
     assert trans.async_request_user.auth_session_id == auth_session.id
 
 
+def test_work_request_context_can_create_default_history_for_anonymous_user():
+    app = galaxy_mock.MockApp()
+    auth_session = app.auth_session_manager.create_session(auth_source="anonymous")
+    trans = WorkRequestContext(app=app, auth_session=auth_session, auth_source="anonymous")
+
+    history = trans.get_history(create=True)
+
+    assert history is not None
+    assert history == auth_session.current_history
+    assert history.user is None
+
+
 def test_effective_api_user_preserves_actor_user_for_run_as():
     app = galaxy_mock.MockApp()
     user_manager = app[UserManager]

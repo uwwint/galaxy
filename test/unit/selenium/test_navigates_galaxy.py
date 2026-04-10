@@ -36,6 +36,67 @@ def _make_masthead() -> SimpleNamespace:
     )
 
 
+def _make_shell() -> SimpleNamespace:
+    return SimpleNamespace(
+        _=SimpleNamespace(center_panel=SimpleNamespace(wait_for_visible=MagicMock())),
+    )
+
+
+def test_home_waits_for_app_shell() -> None:
+    shell = _make_shell()
+    nav = SimpleNamespace(get=MagicMock(), components=shell, wait_for_galaxy_shell=MagicMock())
+
+    NavigatesGalaxy.home(nav)
+
+    nav.get.assert_called_once()
+    nav.wait_for_galaxy_shell.assert_called_once()
+
+
+def test_submit_login_navigates_directly_to_login_start() -> None:
+    login = SimpleNamespace(
+        form=SimpleNamespace(wait_for_visible=MagicMock()), submit=SimpleNamespace(wait_for_and_click=MagicMock())
+    )
+    nav = SimpleNamespace(
+        build_url=MagicMock(return_value="https://example.test/login/start"),
+        navigate_to=MagicMock(),
+        components=SimpleNamespace(login=login),
+        fill=MagicMock(),
+        fill_login_and_submit=MagicMock(),
+        snapshot=MagicMock(),
+        wait_for_logged_in=MagicMock(),
+        default_password="123456",
+    )
+
+    NavigatesGalaxy.submit_login(nav, "test@example.test", assert_valid=False)
+
+    nav.navigate_to.assert_called_once_with("https://example.test/login/start")
+    nav.fill_login_and_submit.assert_called_once_with("test@example.test", password=None)
+
+
+def test_register_navigates_directly_to_register_start() -> None:
+    registration = SimpleNamespace(
+        form=SimpleNamespace(wait_for_visible=MagicMock()),
+        submit=SimpleNamespace(wait_for_and_click=MagicMock()),
+    )
+    nav = SimpleNamespace(
+        build_url=MagicMock(return_value="https://example.test/register/start"),
+        navigate_to=MagicMock(),
+        components=SimpleNamespace(registration=registration),
+        home=MagicMock(),
+        fill=MagicMock(),
+        wait_for_logged_in=MagicMock(),
+        assert_error_message=MagicMock(),
+        default_password="123456",
+    )
+
+    NavigatesGalaxy.register(nav, email="test@example.test", assert_valid=False)
+
+    nav.home.assert_called_once()
+    nav.navigate_to.assert_called_once_with("https://example.test/register/start")
+    registration.form.wait_for_visible.assert_called_once()
+    nav.fill.assert_called_once()
+
+
 def test_wait_for_masthead_waits_for_logged_out_controls() -> None:
     masthead = _make_masthead()
     nav = SimpleNamespace(components=SimpleNamespace(masthead=masthead), is_logged_in=MagicMock(return_value=False))
