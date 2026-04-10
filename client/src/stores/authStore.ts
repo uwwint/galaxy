@@ -119,6 +119,8 @@ export const useAuthStore = defineStore("authStore", () => {
     }
 
     function clearAuthState() {
+        const galaxy = getGalaxyInstance();
+        galaxy?.user?.clearSessionStorage();
         accessToken.value = null;
         accessTokenExpiresAt.value = null;
         authSource.value = null;

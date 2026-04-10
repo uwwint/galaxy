@@ -15,9 +15,6 @@ export function userLogout(logoutAll = false) {
     authStore
         .logout(logoutAll)
         .then((response) => {
-            if (Galaxy.user) {
-                Galaxy.user.clearSessionStorage();
-            }
             if (Galaxy.config.enable_oidc) {
                 return axios.get(withPrefix("/authnz/logout"));
             }
@@ -46,7 +43,6 @@ export function userLogoutClient() {
     const Galaxy = getGalaxyInstance();
     const authStore = useAuthStore();
     authStore.clearAuthState();
-    Galaxy.user?.clearSessionStorage();
     const post_user_logout_href = Galaxy.config.post_user_logout_href;
     window.top.location.href = withPrefix(post_user_logout_href);
 }

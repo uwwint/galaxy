@@ -4,6 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useAuthStore } from "./authStore";
 
+const clearSessionStorage = vi.fn();
+
+vi.mock("@/app", () => ({
+    getGalaxyInstance: vi.fn(() => ({
+        user: {
+            clearSessionStorage,
+        },
+    })),
+}));
+
 vi.mock("axios", () => ({
     default: {
         post: vi.fn(),
@@ -51,6 +61,7 @@ describe("authStore", () => {
     beforeEach(() => {
         setActivePinia(createPinia());
         vi.mocked(axios.post).mockReset();
+        clearSessionStorage.mockReset();
         installCookieJar();
         setVisibilityState("visible");
     });
@@ -126,6 +137,15 @@ describe("authStore", () => {
         expect(authStore.accessToken).toBeNull();
         expect(authStore.currentHistoryId).toBeNull();
         expect(authStore.isAuthenticated).toBe(false);
+    });
+
+    it("clears the browser session storage when auth state is cleared", () => {
+        const authStore = useAuthStore();
+
+        authStore.clearAuthState();
+
+        expect(clearSessionStorage).toHaveBeenCalledOnce();
+        expect(authStore.accessToken).toBeNull();
     });
 
     it("sends the refresh csrf token on all auth endpoints", async () => {
