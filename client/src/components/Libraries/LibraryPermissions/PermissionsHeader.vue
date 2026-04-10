@@ -11,7 +11,7 @@
 </template>
 
 <script>
-import { getGalaxyInstance } from "@/app";
+import { useUserStore } from "@/stores/userStore";
 
 import LibraryPermissionsWarning from "@/components/Libraries/LibraryFolder/LibraryFolderPermissions/LibraryPermissionsWarning.vue";
 
@@ -25,10 +25,10 @@ export default {
             required: true,
         },
     },
-    data() {
-        return {
-            is_admin: getGalaxyInstance().user.attributes.is_admin,
-        };
+    computed: {
+        is_admin() {
+            return useUserStore().isAdmin;
+        },
     },
 };
 </script>

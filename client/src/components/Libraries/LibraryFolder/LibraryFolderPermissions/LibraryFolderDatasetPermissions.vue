@@ -82,11 +82,11 @@ import BootstrapVue from "bootstrap-vue";
 import Vue from "vue";
 import VueObserveVisibility from "vue-observe-visibility";
 
-import { getGalaxyInstance } from "@/app";
 import { extractRoles } from "@/components/Libraries/library-utils";
 import { Services } from "@/components/Libraries/LibraryPermissions/services";
 import { Toast } from "@/composables/toast";
 import { getAppRoot } from "@/onload/loadConfig";
+import { useUserStore } from "@/stores/userStore";
 
 import LibraryBreadcrumb from "@/components/Libraries/LibraryFolder/LibraryBreadcrumb.vue";
 import PermissionsHeader from "@/components/Libraries/LibraryPermissions/PermissionsHeader.vue";
@@ -132,10 +132,9 @@ export default {
         },
     },
     created() {
-        const Galaxy = getGalaxyInstance();
         this.root = getAppRoot();
         this.services = new Services({ root: this.root });
-        this.is_admin = Galaxy.user.attributes.is_admin;
+        this.is_admin = useUserStore().isAdmin;
         this.services
             .getDatasetPermissions(this.dataset_id)
             .then((fetched_permissions) => this.assignFetchedPermissions(fetched_permissions));
