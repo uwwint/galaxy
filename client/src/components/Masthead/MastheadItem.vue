@@ -8,14 +8,42 @@ import { withPrefix } from "@/utils/redirect";
 
 /* props */
 defineProps({
-    disabled: Boolean,
-    id: String,
-    icon: [Object, String] as PropType<IconLike | string>,
-    target: String,
-    title: String,
-    tooltip: String,
-    toggle: Boolean,
-    url: String,
+    disabled: {
+        type: Boolean,
+        default: false,
+    },
+    dataDescription: {
+        type: String,
+        default: null,
+    },
+    id: {
+        type: String,
+        required: true,
+    },
+    icon: {
+        type: [Object, String] as PropType<IconLike | string>,
+        default: null,
+    },
+    target: {
+        type: String,
+        default: null,
+    },
+    title: {
+        type: String,
+        default: null,
+    },
+    tooltip: {
+        type: String,
+        default: null,
+    },
+    toggle: {
+        type: Boolean,
+        default: false,
+    },
+    url: {
+        type: String,
+        default: null,
+    },
 });
 </script>
 
@@ -23,6 +51,7 @@ defineProps({
     <BNavItem
         :id="id"
         v-g-tooltip.hover.bottom
+        :link-attrs="dataDescription ? { 'data-description': dataDescription } : undefined"
         :href="url ? withPrefix(url) : undefined"
         :target="target || '_parent'"
         :link-classes="{ 'nav-icon': !!icon, toggle: toggle }"

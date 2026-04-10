@@ -1,5 +1,5 @@
 // index.ts
-import { createPinia, PiniaVuePlugin } from "pinia";
+import { createPinia, PiniaVuePlugin, setActivePinia } from "pinia";
 import Vue from "vue";
 
 import { initGalaxyInstance } from "@/app";
@@ -12,6 +12,7 @@ import App from "./App.vue";
 
 Vue.use(PiniaVuePlugin);
 const pinia = createPinia();
+setActivePinia(pinia);
 
 window.addEventListener("load", async () => {
     // Create Galaxy object

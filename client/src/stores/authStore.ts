@@ -2,6 +2,8 @@ import axios from "axios";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
+import { getGalaxyInstance } from "@/app";
+import { User } from "@/app/user";
 import { withPrefix } from "@/utils/redirect";
 
 interface SerializedUser {
@@ -43,6 +45,12 @@ interface RegisterPayload {
 
 const REFRESH_SKEW_MS = 30_000;
 const AUTH_REFRESH_CSRF_COOKIE_NAME = "galaxy_refresh_csrf_token";
+const SELENIUM_DEBUG_LOCAL_STORAGE_KEY = "galaxy:debug";
+const SELENIUM_ACCESS_TOKEN_COOKIE_NAME = "galaxy_debug_access_token";
+
+interface WindowWithSeleniumAuthToken extends Window {
+    __GALAXY_TEST_ACCESS_TOKEN__?: string | null;
+}
 
 function decodeBase64Url(value: string): string {
     const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
@@ -63,6 +71,14 @@ function tokenExpiresAt(accessToken: string): number | null {
     }
 }
 
+function syncGalaxyUser(user: SerializedUser | null) {
+    const galaxy = getGalaxyInstance();
+    if (!galaxy) {
+        return;
+    }
+    galaxy.user = new User(user ?? {});
+}
+
 function readCookieValue(name: string): string | null {
     if (typeof document === "undefined") {
         return null;
@@ -70,6 +86,25 @@ function readCookieValue(name: string): string | null {
     const escapedName = name.replace(/([.*+?^${}()|[\]\\])/g, "\\$1");
     const match = document.cookie.match(new RegExp(`(?:^|; )${escapedName}=([^;]*)`));
     return match ? decodeURIComponent(match[1]) : null;
+}
+
+function shouldExposeTestAccessToken(): boolean {
+    if (typeof window === "undefined" || typeof window.localStorage?.getItem !== "function") {
+        return false;
+    }
+    return window.localStorage.getItem(SELENIUM_DEBUG_LOCAL_STORAGE_KEY) === "true";
+}
+
+function setTestAccessToken(accessToken: string | null) {
+    if (!shouldExposeTestAccessToken()) {
+        return;
+    }
+    if (typeof window.localStorage?.setItem === "function") {
+        const cookieValue = accessToken === null ? "" : accessToken;
+        const maxAge = accessToken === null ? 0 : 3600;
+        document.cookie = `${SELENIUM_ACCESS_TOKEN_COOKIE_NAME}=${cookieValue}; path=/; max-age=${maxAge}; samesite=lax`;
+    }
+    (window as WindowWithSeleniumAuthToken).__GALAXY_TEST_ACCESS_TOKEN__ = accessToken;
 }
 
 export const useAuthStore = defineStore("authStore", () => {
@@ -81,9 +116,11 @@ export const useAuthStore = defineStore("authStore", () => {
     const currentHistoryId = ref<string | null>(null);
     const bootstrapStatus = ref<"idle" | "loading" | "ready" | "error">("idle");
     const bootstrapError = ref<string | null>(null);
+    const authStateVersion = ref(0);
 
     let refreshTimer: number | null = null;
     let refreshPromise: Promise<BrowserAuthPayload> | null = null;
+    let bootstrapPromise: Promise<BrowserAuthPayload> | null = null;
     let refreshListenersBound = false;
 
     const isAuthenticated = computed(() => Boolean(accessToken.value));
@@ -107,6 +144,10 @@ export const useAuthStore = defineStore("authStore", () => {
         bootstrapError.value = null;
     }
 
+    function notifyAuthStateChanged() {
+        authStateVersion.value += 1;
+    }
+
     function clearAuthState() {
         accessToken.value = null;
         accessTokenExpiresAt.value = null;
@@ -114,8 +155,11 @@ export const useAuthStore = defineStore("authStore", () => {
         effectiveUser.value = null;
         actorUser.value = null;
         currentHistoryId.value = null;
+        syncGalaxyUser(null);
+        setTestAccessToken(null);
         clearRefreshTimer();
         resetBootstrapState();
+        notifyAuthStateChanged();
     }
 
     function bindRefreshListeners() {
@@ -155,13 +199,18 @@ export const useAuthStore = defineStore("authStore", () => {
         effectiveUser.value = payload.user;
         actorUser.value = payload.actor_user;
         currentHistoryId.value = payload.current_history_id;
-        if (payload.access_token) {
+        syncGalaxyUser(payload.user);
+        if (payload.authenticated) {
+            setTestAccessToken(payload.access_token);
+        }
+        if (payload.authenticated && payload.access_token) {
             scheduleRefresh();
         } else {
             clearRefreshTimer();
         }
         bootstrapStatus.value = "ready";
         bootstrapError.value = null;
+        notifyAuthStateChanged();
         return payload;
     }
 
@@ -192,6 +241,18 @@ export const useAuthStore = defineStore("authStore", () => {
             bootstrapError.value = error instanceof Error ? error.message : "Login completion failed.";
             clearAuthState();
             throw error;
+        }
+    }
+
+    async function ensureBootstrap(): Promise<BrowserAuthPayload> {
+        if (bootstrapPromise) {
+            return bootstrapPromise;
+        }
+        bootstrapPromise = bootstrap();
+        try {
+            return await bootstrapPromise;
+        } finally {
+            bootstrapPromise = null;
         }
     }
 
@@ -258,10 +319,12 @@ export const useAuthStore = defineStore("authStore", () => {
         accessToken,
         authSource,
         actorUser,
+        authStateVersion,
         bootstrapError,
         bootstrapStatus,
         currentHistoryId,
         effectiveUser,
+        ensureBootstrap,
         hasActiveAuthToken,
         isAuthenticated,
         isImpersonating,

@@ -11,6 +11,7 @@ import LibraryRoutes from "@/entry/analysis/routes/library-routes";
 import StorageRoutes from "@/entry/analysis/routes/storage-routes";
 import { getAppRoot } from "@/onload/loadConfig";
 import { requireAuth } from "@/router/guards";
+import { useAuthStore } from "@/stores/authStore";
 import { parseBool } from "@/utils/utils";
 
 import { patchRouterPush } from "./router-push";
@@ -105,8 +106,8 @@ import WorkflowImport from "@/components/Workflow/WorkflowImport.vue";
 import WorkflowInvocationState from "@/components/WorkflowInvocationState/WorkflowInvocationState.vue";
 import Analysis from "@/entry/analysis/modules/Analysis.vue";
 import Home from "@/entry/analysis/modules/Home.vue";
-import LoginCallback from "@/entry/analysis/modules/LoginCallback.vue";
 import Login from "@/entry/analysis/modules/Login.vue";
+import LoginCallback from "@/entry/analysis/modules/LoginCallback.vue";
 import Register from "@/entry/analysis/modules/Register.vue";
 import WorkflowEditorModule from "@/entry/analysis/modules/WorkflowEditor.vue";
 
@@ -132,22 +133,33 @@ patchRouterPush(VueRouter);
 
 // redirect anon users
 function redirectAnon(redirect = "") {
-    const Galaxy = getGalaxyInstance();
-    if (!Galaxy.user || !Galaxy.user.id) {
+    return () => {
+        const authStore = useAuthStore();
+        if (authStore.bootstrapStatus !== "ready") {
+            return;
+        }
+        if (authStore.isAuthenticated) {
+            return;
+        }
         if (redirect !== "") {
             return redirect;
         } else {
             return "/login/start";
         }
-    }
+    };
 }
 
 // redirect logged in users
 function redirectLoggedIn() {
-    const Galaxy = getGalaxyInstance();
-    if (Galaxy.user.id) {
-        return "/";
-    }
+    return () => {
+        const authStore = useAuthStore();
+        if (authStore.bootstrapStatus !== "ready") {
+            return;
+        }
+        if (authStore.isAuthenticated) {
+            return "/";
+        }
+    };
 }
 
 function redirectIf(condition, path) {
@@ -651,17 +663,17 @@ export function getRouter(Galaxy) {
                     {
                         path: "user",
                         component: UserPreferences,
-                        redirect: redirectAnon(),
+                        beforeEnter: requireAuth,
                     },
                     {
                         path: "user/api_key",
                         component: APIKey,
-                        redirect: redirectAnon(),
+                        beforeEnter: requireAuth,
                     },
                     {
                         path: "user/credentials",
                         component: CredentialsManagement,
-                        redirect: redirectAnon(),
+                        beforeEnter: requireAuth,
                     },
                     {
                         path: "user/oidc-profile",
@@ -690,12 +702,12 @@ export function getRouter(Galaxy) {
                     {
                         path: "user/notifications/preferences",
                         component: NotificationsPreferences,
-                        redirect: redirectAnon(),
+                        beforeEnter: requireAuth,
                     },
                     {
                         path: "user/permissions",
                         component: UserDatasetPermissions,
-                        redirect: redirectAnon(),
+                        beforeEnter: requireAuth,
                         props: {
                             userId: Galaxy.user.id,
                         },
@@ -703,11 +715,11 @@ export function getRouter(Galaxy) {
                     {
                         path: "user/:formId",
                         component: UserPreferencesForm,
+                        beforeEnter: requireAuth,
                         props: (route) => ({
                             formId: route.params.formId,
                             id: route.query.id,
                         }),
-                        redirect: redirectAnon(),
                     },
                     {
                         path: "visualizations",
@@ -938,7 +950,15 @@ export function getRouter(Galaxy) {
     }
 
     router.beforeEach(async (to, from, next) => {
-        // TODO: merge anon redirect functionality here for more standard handling
+        const authStore = useAuthStore();
+        await authStore.ensureBootstrap().catch(() => undefined);
+
+        if (to.path === "/login/start" || to.path === "/register/start") {
+            if (authStore.isAuthenticated) {
+                next("/");
+                return;
+            }
+        }
 
         const isAdminAccessRequired = checkAdminAccessRequired(to);
         if (isAdminAccessRequired) {

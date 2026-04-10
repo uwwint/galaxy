@@ -1,12 +1,12 @@
 import type { NavigationGuardNext, Route } from "vue-router";
 
-import { useUserStore } from "@/stores/userStore";
+import { useAuthStore } from "@/stores/authStore";
 
 export async function requireAuth(to: Route, from: Route, next: NavigationGuardNext) {
-    const userStore = useUserStore();
-    await userStore.loadUser(false);
+    const authStore = useAuthStore();
+    await authStore.ensureBootstrap().catch(() => undefined);
 
-    if (userStore.isAnonymous) {
+    if (!authStore.accessToken || !authStore.effectiveUser) {
         next({
             path: "/login/start",
             query: {

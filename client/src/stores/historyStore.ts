@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { computed, del, ref, set } from "vue";
+import { computed, del, ref, set, watch } from "vue";
 
 import {
     type AnyHistory,
@@ -16,6 +16,7 @@ import { getGalaxyInstance } from "@/app";
 import { HistoryFilters } from "@/components/History/HistoryFilters";
 import { useResourceWatcher } from "@/composables/resourceWatcher";
 import { useUserLocalStorage } from "@/composables/userLocalStorage";
+import { useAuthStore } from "@/stores/authStore";
 import {
     createAndSelectNewHistory,
     getCurrentHistoryFromServer,
@@ -39,6 +40,7 @@ const retryCounts: { [key: string]: number } = {};
 const CONTENT_STATS_KEYS = ["size", "contents_active", "update_time"] as const;
 
 export const useHistoryStore = defineStore("historyStore", () => {
+    const authStore = useAuthStore();
     const historiesLoading = ref(false);
     const historiesOffset = ref(0);
     const totalHistoryCount = ref(0);
@@ -48,6 +50,7 @@ export const useHistoryStore = defineStore("historyStore", () => {
     const storedHistories = ref<{ [key: string]: AnyHistory }>({});
     const historyLoadErrors = ref<{ [key: string]: Error }>({});
     const changingCurrentHistory = ref(false);
+    let syncedAuthUserId: string | null = null;
 
     const histories = computed(() => {
         return Object.values(storedHistories.value)
@@ -67,11 +70,10 @@ export const useHistoryStore = defineStore("historyStore", () => {
     });
 
     const currentHistoryId = computed(() => {
-        if (storedCurrentHistoryId.value === null || !(storedCurrentHistoryId.value in storedHistories.value)) {
-            return getFirstHistoryId.value;
-        } else {
+        if (storedCurrentHistoryId.value !== null) {
             return storedCurrentHistoryId.value;
         }
+        return getFirstHistoryId.value;
     });
 
     const currentFilterText = computed(() => {
@@ -135,6 +137,19 @@ export const useHistoryStore = defineStore("historyStore", () => {
         storedCurrentHistoryId.value = historyId;
     }
 
+    function clearHistoryState() {
+        historiesLoading.value = false;
+        historiesOffset.value = 0;
+        totalHistoryCount.value = 0;
+        pinnedHistories.value = [];
+        storedCurrentHistoryId.value = null;
+        storedFilterTexts.value = {};
+        storedHistories.value = {};
+        historyLoadErrors.value = {};
+        changingCurrentHistory.value = false;
+        syncedAuthUserId = null;
+    }
+
     function setFilterText(historyId: string, filterText: string) {
         set(storedFilterTexts.value, historyId, filterText);
     }
@@ -194,6 +209,33 @@ export const useHistoryStore = defineStore("historyStore", () => {
     function selectHistory(history: HistorySummary) {
         setHistory(history);
         setCurrentHistoryId(history.id);
+    }
+
+    function syncFromAuthStore() {
+        const authUser = authStore.effectiveUser;
+        const authUserId = authUser?.id ?? null;
+        if (!authStore.accessToken) {
+            clearHistoryState();
+            return;
+        }
+
+        if (authStore.bootstrapStatus !== "ready") {
+            return;
+        }
+
+        const userChanged = authUserId !== syncedAuthUserId;
+
+        if (userChanged) {
+            clearHistoryState();
+            syncedAuthUserId = authUserId;
+        }
+
+        if (authStore.currentHistoryId && storedCurrentHistoryId.value !== authStore.currentHistoryId) {
+            setCurrentHistoryId(authStore.currentHistoryId);
+        }
+        if (authStore.currentHistoryId && !(authStore.currentHistoryId in storedHistories.value)) {
+            void loadCurrentHistory();
+        }
     }
 
     async function applyFilters(historyId: string, filters: Record<string, string | number | boolean>) {
@@ -399,6 +441,12 @@ export const useHistoryStore = defineStore("historyStore", () => {
         },
     );
 
+    watch(
+        () => [authStore.bootstrapStatus, authStore.authStateVersion, authStore.accessToken, authStore.effectiveUser?.id],
+        syncFromAuthStore,
+        { immediate: true },
+    );
+
     async function loadHistoryById(historyId: string) {
         if (!isLoadingHistory.has(historyId)) {
             isLoadingHistory.add(historyId);
@@ -538,5 +586,6 @@ export const useHistoryStore = defineStore("historyStore", () => {
         historiesOffset,
         totalHistoryCount,
         updateContentStats,
+        clearHistoryState,
     };
 });

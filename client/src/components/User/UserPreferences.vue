@@ -17,7 +17,7 @@ import {
     faSignOut,
     faUsers,
 } from "font-awesome-6";
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 
 import { hasSingleOidcProfile, type OIDCConfig } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { getUserPreferencesModel } from "@/components/User/UserPreferencesModel";
@@ -69,6 +69,7 @@ const activePreferences = computed(() => {
     const enabledPreferences = Object.entries(userPreferencesEntries).filter(([, value]) => !value.disabled);
     return Object.fromEntries(enabledPreferences);
 });
+
 // Show the OIDC profile management widget if local account editing is disabled and OIDC profile is configured
 // through a single provider
 const showOidcProfile = computed<boolean>(() => {

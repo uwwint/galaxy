@@ -120,11 +120,9 @@ export default {
                 } else {
                     void (async () => {
                         try {
-                            await authStore.bootstrap();
+                            await authStore.ensureBootstrap();
                         } catch {
                             // Bootstrap failures should not block anonymous app rendering.
-                        } finally {
-                            await userStore.loadUser();
                         }
                     })();
                 }
@@ -198,7 +196,6 @@ export default {
     },
     watch: {
         confirmation() {
-            console.debug("App - Confirmation before route change: ", this.confirmation);
             this.$router.confirmation = this.confirmation;
         },
     },

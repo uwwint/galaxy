@@ -45,6 +45,14 @@ describe("Masthead.vue", () => {
         localVue = getLocalVue();
         localVue.use(PiniaVuePlugin);
         testPinia = createTestingPinia({ createSpy: vi.fn });
+        Object.defineProperty(window, "localStorage", {
+            configurable: true,
+            value: {
+                getItem: vi.fn(() => null),
+                setItem: vi.fn(),
+                removeItem: vi.fn(),
+            },
+        });
 
         windowManager = new WindowManager({});
         const windowTab = windowManager.getTab();
@@ -78,5 +86,11 @@ describe("Masthead.vue", () => {
 
     it("should load webhooks on creation", async () => {
         expect(wrapper.find("#extension a").text()).toBe("Extension Point");
+    });
+
+    it("should render clickable login and register links for anonymous users", () => {
+        expect(wrapper.find('[data-description="login masthead button"]').exists()).toBe(true);
+        expect(wrapper.find("#user a").attributes("data-description")).toBe("login masthead button");
+        expect(wrapper.find("#user a").attributes("href")).toBe("/login/start");
     });
 });

@@ -111,6 +111,14 @@ async function submitLogin() {
             window.location.href = withPrefix(`/root/login?expired_user=${response.expired_user}`);
         } else if (connectExternalProvider.value) {
             window.location.href = withPrefix("/user/external_ids?connect_external=true");
+        } else if (response.access_token) {
+            const redirectTarget = response.redirect || redirect || "/";
+            await router.push({
+                path: "/login/callback",
+                query: {
+                    redirect: redirectTarget,
+                },
+            });
         } else if (response.redirect) {
             window.location.href = withPrefix(encodeURI(response.redirect));
         } else {

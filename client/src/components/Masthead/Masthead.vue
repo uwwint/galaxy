@@ -13,6 +13,7 @@ import {
     redirectToSingleProvider,
 } from "@/components/User/ExternalIdentities/ExternalIDHelper";
 import { useConfig } from "@/composables/config";
+import { useAuthStore } from "@/stores/authStore";
 import { useUserStore } from "@/stores/userStore";
 import { userLogout } from "@/utils/logout";
 import { withPrefix } from "@/utils/redirect";
@@ -23,7 +24,13 @@ import MastheadDropdown from "./MastheadDropdown.vue";
 import MastheadItem from "./MastheadItem.vue";
 import QuotaMeter from "./QuotaMeter.vue";
 
-const { isAnonymous, currentUser } = storeToRefs(useUserStore());
+const { currentUser } = storeToRefs(useUserStore());
+const authStore = useAuthStore();
+const { effectiveUser, isAuthenticated } = storeToRefs(authStore);
+
+const displayUser = computed(() => {
+    return effectiveUser.value ?? currentUser.value;
+});
 
 const router = useRouter();
 const { config, isConfigLoaded } = useConfig();
@@ -170,25 +177,27 @@ onMounted(() => {
                 @click="openUrl('/about')" />
             <QuotaMeter />
             <MastheadItem
-                v-if="isAnonymous"
+                v-if="!isAuthenticated"
                 id="user"
                 class="loggedout-only"
                 data-description="login masthead button"
+                url="/login/start"
                 title="Login"
                 @click="performLogin()" />
             <MastheadItem
-                v-if="isAnonymous && (config.allow_local_account_creation || hasOIDCRegistration)"
+                v-if="!isAuthenticated && (config.allow_local_account_creation || hasOIDCRegistration)"
                 id="user-register"
                 class="loggedout-only"
                 data-description="register masthead button"
+                url="/register/start"
                 title="Register"
                 @click="performRegistration()" />
             <MastheadDropdown
-                v-if="currentUser && !isAnonymous && !config.single_user"
+                v-if="displayUser && isAuthenticated && !config.single_user"
                 id="user"
                 class="loggedin-only"
                 :icon="faUser"
-                :title="currentUser.username"
+                :title="displayUser.username"
                 tooltip="User Preferences"
                 :menu="[
                     {
@@ -204,11 +213,11 @@ onMounted(() => {
                 ]"
                 @click="userLogout" />
             <MastheadDropdown
-                v-if="currentUser && !isAnonymous && config.single_user"
+                v-if="displayUser && isAuthenticated && config.single_user"
                 id="user"
                 class="loggedin-only"
                 :icon="faUser"
-                :title="currentUser.username"
+                :title="displayUser.username"
                 tooltip="User Preferences"
                 :menu="[
                     {

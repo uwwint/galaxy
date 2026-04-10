@@ -1,9 +1,12 @@
 import { defineStore } from "pinia";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import { type AnyUser, isAdminUser, isAnonymousUser, isRegisteredUser, type RegisteredUser } from "@/api";
+import { getGalaxyInstance } from "@/app";
+import { User } from "@/app/user";
 import { useHashedUserId } from "@/composables/hashedUserId";
 import { useUserLocalStorageFromHashId } from "@/composables/userLocalStorageFromHashedId";
+import { useAuthStore } from "@/stores/authStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import {
     addFavoriteToolQuery,
@@ -28,9 +31,18 @@ type UserListViewPreferences = Record<string, ListViewMode>;
 
 const RECENT_TOOLS_LIMIT = 10;
 
+function syncGalaxyUser(user: AnyUser | null) {
+    const galaxy = getGalaxyInstance();
+    if (!galaxy) {
+        return;
+    }
+    galaxy.user = new User(user ?? {});
+}
+
 export const useUserStore = defineStore("userStore", () => {
     const currentUser = ref<AnyUser>(null);
     const currentPreferences = ref<Preferences | null>(null);
+    const authStore = useAuthStore();
     const { hashedUserId } = useHashedUserId(currentUser);
 
     const currentListViewPreferences = useUserLocalStorageFromHashId<UserListViewPreferences>(
@@ -46,12 +58,16 @@ export const useUserStore = defineStore("userStore", () => {
     const recentTools = useUserLocalStorageFromHashId<string[]>("user-store-recent-tools", [], hashedUserId);
 
     let loadPromise: Promise<void> | null = null;
+    let loadGeneration = 0;
+    let syncedAuthUserId: string | null = null;
 
     function $reset() {
+        loadGeneration += 1;
         currentUser.value = null;
         currentPreferences.value = null;
         recentTools.value = [];
         loadPromise = null;
+        syncGalaxyUser(null);
     }
 
     const isAdmin = computed(() => {
@@ -82,31 +98,87 @@ export const useUserStore = defineStore("userStore", () => {
 
     function setCurrentUser(user: RegisteredUser) {
         currentUser.value = user;
+        syncGalaxyUser(user);
+    }
+
+    function clearUserForAuthTransition() {
+        loadGeneration += 1;
+        loadPromise = null;
+        currentUser.value = null;
+        currentPreferences.value = null;
+        recentTools.value = [];
+        syncGalaxyUser(null);
+    }
+
+    function syncFromAuthStore() {
+        if (!authStore.accessToken) {
+            syncedAuthUserId = null;
+            $reset();
+            return;
+        }
+
+        if (authStore.bootstrapStatus !== "ready") {
+            return;
+        }
+
+        const authUser = authStore.effectiveUser;
+        const authUserId = authUser && isRegisteredUser(authUser) ? authUser.id : null;
+        const userChanged = authUserId !== syncedAuthUserId;
+        if (userChanged) {
+            syncedAuthUserId = authUserId;
+            clearUserForAuthTransition();
+        }
+
+        if (authUser && isRegisteredUser(authUser)) {
+            currentUser.value = authUser;
+            syncGalaxyUser(authUser);
+            if (!currentPreferences.value || userChanged) {
+                currentPreferences.value = null;
+                void loadUser(false);
+            }
+            return;
+        }
+
+        if (authUser === null) {
+            void loadUser(false);
+        }
     }
 
     function loadUser(includeHistories = true) {
         if (!loadPromise) {
+            const generation = loadGeneration;
             loadPromise = new Promise<void>((resolve, reject) => {
                 (async () => {
                     try {
                         const user = await getCurrentUser();
+                        if (generation !== loadGeneration) {
+                            resolve();
+                            return;
+                        }
 
                         if (isRegisteredUser(user)) {
                             currentUser.value = user;
                             currentPreferences.value = processUserPreferences(user);
+                            syncGalaxyUser(user);
                         } else if (isAnonymousUser(user)) {
                             currentUser.value = user;
+                            syncGalaxyUser(user);
                         } else if (user === null) {
                             currentUser.value = null;
+                            syncGalaxyUser(null);
                         }
                         if (includeHistories) {
                             const historyStore = useHistoryStore();
                             await historyStore.loadHistories();
                         }
-                        resolve(); // Resolve the promise after successful load
+                        resolve();
                     } catch (e) {
+                        if (generation !== loadGeneration) {
+                            resolve();
+                            return;
+                        }
                         console.error("Failed to load user", e);
-                        reject(e); // Reject the promise on error
+                        reject(e);
                     } finally {
                         //Don't clear the loadPromise, we still want multiple callers to await.
                         //Instead we must clear it upon $reset
@@ -117,6 +189,12 @@ export const useUserStore = defineStore("userStore", () => {
         }
         return loadPromise; // Return the shared promise
     }
+
+    watch(
+        () => [authStore.bootstrapStatus, authStore.authStateVersion, authStore.accessToken, authStore.effectiveUser?.id],
+        syncFromAuthStore,
+        { immediate: true },
+    );
 
     async function setCurrentTheme(theme: string) {
         if (!currentUser.value || currentUser.value.isAnonymous) {
