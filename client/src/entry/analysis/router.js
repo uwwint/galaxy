@@ -709,7 +709,7 @@ export function getRouter(Galaxy) {
                         component: UserDatasetPermissions,
                         beforeEnter: requireAuth,
                         props: {
-                            userId: Galaxy.user.id,
+                            userId: useAuthStore().effectiveUser?.id,
                         },
                     },
                     {

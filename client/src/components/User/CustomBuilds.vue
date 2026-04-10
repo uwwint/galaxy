@@ -166,7 +166,7 @@ import {
 } from "bootstrap-vue";
 import Multiselect from "vue-multiselect";
 
-import { getGalaxyInstance } from "@/app";
+import { useAuthStore } from "@/stores/authStore";
 import { useHistoryStore } from "@/stores/historyStore";
 import { withPrefix } from "@/utils/redirect";
 
@@ -195,12 +195,13 @@ export default {
         Multiselect,
     },
     data() {
-        const Galaxy = getGalaxyInstance();
+        const authStore = useAuthStore();
+        const currentUserId = authStore.effectiveUser?.id;
         return {
             faSave,
             faTrash,
             breadcrumbItems: [{ title: "User Preferences", to: "/user" }, { title: "Current Custom Builds" }],
-            customBuildsUrl: withPrefix(`/api/users/${Galaxy.user.id}/custom_builds`),
+            customBuildsUrl: withPrefix(`/api/users/${currentUserId}/custom_builds`),
             selectedInstalledBuilds: [],
             installedBuilds: [],
             maxFileSize: 100,

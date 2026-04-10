@@ -1,6 +1,6 @@
 import axios from "axios";
 
-import { getGalaxyInstance } from "@/app";
+import { useAuthStore } from "@/stores/authStore";
 import { withPrefix } from "@/utils/redirect";
 import { rethrowSimple } from "@/utils/simple-error";
 
@@ -9,14 +9,15 @@ import { toSimple } from "./Editor/modules/model";
 /** Workflow data request helper **/
 export class Services {
     async copyWorkflow(workflow) {
-        const Galaxy = getGalaxyInstance();
+        const authStore = useAuthStore();
+        const currentUsername = authStore.effectiveUser?.username;
         const url = withPrefix(`/api/workflows/${workflow.id}/download`);
         try {
             const response = await axios.get(url);
             const newWorkflow = response.data;
             const currentOwner = workflow.owner;
             let newName = `Copy of ${workflow.name}`;
-            if (currentOwner != Galaxy.user.attributes.username) {
+            if (currentOwner != currentUsername) {
                 newName += ` shared by user ${currentOwner}`;
             }
             newWorkflow.name = newName;
@@ -71,8 +72,8 @@ export class Services {
     }
 
     _addAttributes(workflow) {
-        const Galaxy = getGalaxyInstance();
-        workflow.shared = workflow.owner !== Galaxy.user.attributes.username;
+        const authStore = useAuthStore();
+        workflow.shared = workflow.owner !== authStore.effectiveUser?.username;
         workflow.description = "";
         if (workflow.annotations && workflow.annotations.length > 0) {
             const description = workflow.annotations[0].trim();

@@ -5,10 +5,10 @@ import { computed, nextTick, reactive, ref, watch } from "vue";
 
 import type { AnyShareableItemWithStatus, ShareOption } from "@/api";
 import { isShareableHistoryWithStatus } from "@/api";
-import { getGalaxyInstance } from "@/app";
 import { getFullAppUrl } from "@/app/utils";
 import { useToast } from "@/composables/toast";
 import { getAppRoot } from "@/onload/loadConfig";
+import { useAuthStore } from "@/stores/authStore";
 import { errorMessageAsString } from "@/utils/simple-error";
 
 import EditableUrl from "./EditableUrl.vue";
@@ -66,6 +66,10 @@ watch(
 );
 
 const slugUrl = computed(() => `${getAppRoot()}api/${props.pluralName.toLowerCase()}/${props.id}/slug`);
+const authStore = useAuthStore();
+const currentUserId = computed(() => authStore.effectiveUser?.id ?? null);
+const hasUsername = ref(Boolean(authStore.effectiveUser?.username));
+const newUsername = ref("");
 
 function onChangeSlug(newValue: string) {
     itemUrl.slug = newValue;
@@ -191,14 +195,14 @@ function onPublish(published: boolean) {
     }
 }
 
-const hasUsername = ref(Boolean(getGalaxyInstance().user.get("username")));
-const newUsername = ref("");
-
 const slugSet = computed(() => itemUrl.slug != "__slug__" && itemUrl.prefix != "__username__");
 
 async function setUsername() {
+    if (!currentUserId.value) {
+        return;
+    }
     axios
-        .put(`${getAppRoot()}api/users/${getGalaxyInstance().user.id}/information/inputs`, {
+        .put(`${getAppRoot()}api/users/${currentUserId.value}/information/inputs`, {
             username: newUsername.value || "",
         })
         .then((response) => {
