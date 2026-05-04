@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from galaxy.model import (
     Role,
+    UserAuthnzToken,
     UserRoleAssociation,
 )
 from galaxy.model.db.user import (
@@ -39,6 +40,15 @@ def test_get_user_by_email(session, make_user):
 
     user = get_user_by_email(session, "a@foo.bar")
     assert user is my_user
+
+
+def test_has_social_auth_provider(session, make_user):
+    user = make_user(email="linked@foo.bar")
+    session.add(UserAuthnzToken(provider="keycloak", uid="keycloak-user", user=user))
+    session.commit()
+
+    assert user.has_social_auth_provider("keycloak")
+    assert not user.has_social_auth_provider("cilogon")
 
 
 def test_get_users_by_ids(session, make_random_users):

@@ -192,13 +192,22 @@ class AbstractTestCases:
             if expected_codes is None:
                 expected_codes = [200, 404]
             session = session or requests.Session()
+            provider_session = requests.Session()
             response = session.get(f"{self.url}authnz/{self.provider_name}/login")
             provider_url = response.json()["redirect_uri"]
-            response = session.get(provider_url, verify=False)
+            response = provider_session.get(provider_url, verify=False)
             matches = self.REGEX_KEYCLOAK_LOGIN_ACTION.search(response.text)
             assert matches
             auth_url = html.unescape(str(matches.group(1)))
-            response = session.post(auth_url, data={"username": username, "password": password}, verify=False)
+            response = provider_session.post(
+                auth_url,
+                data={"username": username, "password": password},
+                verify=False,
+                allow_redirects=False,
+            )
+            assert response.status_code in [302, 303], response
+            callback_url = response.headers["Location"]
+            response = session.get(callback_url, verify=False)
             assert response.status_code in expected_codes, response
             if save_cookies:
                 self.galaxy_interactor.cookies = session.cookies
@@ -388,16 +397,6 @@ class TestGalaxyOIDCLoginIntegration(AbstractTestCases.BaseKeycloakIntegrationTe
 
         # Now that the accounts are associated, future logins through OIDC should just work
         session, response = self._login_via_keycloak("gxyuser_existing", KEYCLOAK_TEST_PASSWORD, save_cookies=True)
-
-        # On repeat login, should NOT show the "linked" notification
-        parsed_url = parse.urlparse(response.url)
-        query_params = parse.parse_qs(parsed_url.query)
-        assert "notification" not in query_params, "Repeat login should not show 'linked' notification"
-
-        response = session.get(self._api_url("users/current"))
-        self._assert_status_code_is(response, 200)
-        assert response.json()["email"] == "gxyuser_existing@galaxy.org"
-        assert response.json()["username"] == "precreated_user"
 
     def test_oidc_logout(self):
         # login
@@ -813,6 +812,73 @@ class TestWithoutFixedDelegatedAuth(AbstractTestCases.BaseKeycloakIntegrationTes
         response = self._get("users/current")
         self._assert_status_code_is(response, 200)
         assert response.json()["email"] == "gxyuser_new_no_fixed@galaxy.org"
+
+    def test_oidc_rejects_second_identity_from_same_provider(self):
+        # pre-create a user account manually and log into it
+        sa_session = self._app.model.session
+        user = model.User(email="same_provider_owner@galaxy.org", username="same_provider_owner")
+        user.set_password_cleartext("test123")
+        sa_session.add(user)
+        sa_session.commit()
+
+        sa_session.query(model.UserAuthnzToken).filter(
+            model.UserAuthnzToken.provider == "keycloak",
+            model.UserAuthnzToken.uid.in_(["gxyuser_existing", "gxyuser_brand_new"]),
+        ).delete(synchronize_session=False)
+        sa_session.commit()
+
+        session = requests.Session()
+        response = session.get(self._api_url("../login/start"))
+        matches = self.REGEX_GALAXY_CSRF_TOKEN.search(response.text)
+        assert matches
+        session_csrf_token = str(matches.groups(1)[0])
+        response = session.post(
+            self._api_url("../user/login"),
+            data={
+                "login": "same_provider_owner@galaxy.org",
+                "password": "test123",
+                "session_csrf_token": session_csrf_token,
+            },
+        )
+
+        response = session.get(self._api_url("users/current"))
+        self._assert_status_code_is(response, 200)
+        assert response.json()["email"] == "same_provider_owner@galaxy.org"
+        assert response.json()["username"] == "same_provider_owner"
+
+        # Link the first Keycloak identity to the existing account.
+        _, response = self._login_via_keycloak(
+            "gxyuser_existing", KEYCLOAK_TEST_PASSWORD, save_cookies=False, session=session
+        )
+        parsed_url = parse.urlparse(response.url)
+        query_params = parse.parse_qs(parsed_url.query)
+        assert "notification" in query_params
+
+        token = (
+            sa_session.query(model.UserAuthnzToken)
+            .filter_by(user_id=user.id, provider="keycloak")
+            .one_or_none()
+        )
+        assert token is not None
+
+        # Attempt to link a second Keycloak identity from the same provider.
+        _, response = self._login_via_keycloak("gxyuser_brand_new", KEYCLOAK_TEST_PASSWORD, session=session)
+
+        parsed_url = parse.urlparse(response.url)
+        assert "user/external_ids" in parsed_url.path or "user/external_ids" in response.url
+        query_params = parse.parse_qs(parsed_url.query)
+        assert "message" in query_params
+        assert "already has a linked Keycloak identity" in query_params["message"][0]
+        assert query_params["status"][0] == "danger"
+        assert "notification" not in query_params
+
+        response = session.get(self._api_url("users/current"))
+        self._assert_status_code_is(response, 200)
+        assert response.json()["email"] == "same_provider_owner@galaxy.org"
+        assert response.json()["username"] == "same_provider_owner"
+
+        linked_identities = [auth for auth in user.social_auth if auth.provider == "keycloak"]
+        assert len(linked_identities) == 1
 
     def test_logged_in_user_links_identity_with_different_email(self):
         """

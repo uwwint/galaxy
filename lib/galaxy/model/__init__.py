@@ -1151,6 +1151,14 @@ ON CONFLICT
                 return auth
         return None
 
+    def has_social_auth_provider(self, provider_backend: str) -> bool:
+        session = required_object_session(self)
+        stmt = select(UserAuthnzToken.id, UserAuthnzToken.user_id, UserAuthnzToken.provider, UserAuthnzToken.uid).where(
+            UserAuthnzToken.user_id == self.id,
+            UserAuthnzToken.provider == provider_backend,
+        )
+        return session.execute(stmt).first() is not None
+
     def get_oidc_tokens(self, provider_backend):
         tokens = {"id": None, "access": None, "refresh": None}
         if auth := self._get_social_auth(provider_backend):

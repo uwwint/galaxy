@@ -13,9 +13,11 @@ from unittest.mock import (
     MagicMock,
     patch,
 )
+from urllib.parse import parse_qs, urlparse
 
 import jwt
 import pytest
+from social_core.utils import setting_name
 
 # Tools from hazmat should only be used for testing!
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -39,8 +41,14 @@ from galaxy.authnz.psa_authnz import (
     AUTH_PIPELINE,
     decode_access_token,
     PSAAuthnz,
+    reject_duplicate_provider_link,
     sync_user_profile,
 )
+
+
+class MockStrategy:
+    def __init__(self, config=None):
+        self.config = config or {}
 
 
 @pytest.fixture(scope="module")
@@ -455,3 +463,38 @@ def test_sync_user_profile_updates_when_account_interface_disabled():
     manager.update_username.assert_called_once_with(trans, user, "newname", commit=False)
     assert session.commit.call_count == 1
     notify.assert_called_once()
+
+
+def test_reject_duplicate_provider_link_redirects_to_external_ids_when_provider_already_linked():
+    user = SimpleNamespace(has_social_auth_provider=lambda provider: provider == "keycloak")
+    strategy = MockStrategy(
+        {
+            "provider": "keycloak",
+            "LABEL": "Keycloak",
+            setting_name("LOGIN_REDIRECT_URL"): "http://localhost:8080/",
+        }
+    )
+
+    result = reject_duplicate_provider_link(strategy=strategy, user=user, social=None)
+
+    assert isinstance(result, str)
+    parsed = urlparse(result)
+    assert parsed.path == "/user/external_ids"
+    query = parse_qs(parsed.query)
+    assert query["status"] == ["danger"]
+    assert "already has a linked Keycloak identity" in query["message"][0]
+
+
+def test_reject_duplicate_provider_link_does_not_block_repeat_login():
+    user = SimpleNamespace(has_social_auth_provider=lambda provider: True)
+    strategy = MockStrategy(
+        {
+            "provider": "keycloak",
+            "LABEL": "Keycloak",
+            setting_name("LOGIN_REDIRECT_URL"): "http://localhost:8080/",
+        }
+    )
+
+    result = reject_duplicate_provider_link(strategy=strategy, user=user, social=SimpleNamespace())
+
+    assert result is None

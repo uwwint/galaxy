@@ -123,6 +123,8 @@ AUTH_PIPELINE = (
     # If require_create_confirmation is enabled and this is a new user,
     # redirect to confirmation page instead of creating user immediately.
     "galaxy.authnz.psa_authnz.check_user_creation_confirmation",
+    # Prevent linking a second identity from the same provider to one Galaxy account.
+    "galaxy.authnz.psa_authnz.reject_duplicate_provider_link",
     # Create a user account if we haven't found one yet.
     "social_core.pipeline.user.create_user",
     # Create the record that associated the social account with this user.
@@ -337,6 +339,12 @@ class PSAAuthnz(IdentityProvider):
             state=state_token,
         )
         redirect_url = redirect.url if hasattr(redirect, "url") else redirect
+        duplicate_provider_rejection = (
+            isinstance(redirect_url, str)
+            and "user/external_ids" in redirect_url
+            and "message=" in redirect_url
+            and "status=danger" in redirect_url
+        )
 
         user = self.config.get("user", None)
 
@@ -351,6 +359,8 @@ class PSAAuthnz(IdentityProvider):
         email_exists = self.config.get("EMAIL_EXISTS")  # Set by pipeline if email matches different user
 
         if redirect_url and isinstance(redirect_url, str) and not redirect_url.startswith("?"):
+            if duplicate_provider_rejection:
+                return redirect_url, user
             # Check if PSA returned a redirect to login/start or confirmation page
             # If so, keep it as-is (don't modify for these special cases)
             if "login/start" not in redirect_url and "?confirm" not in redirect_url:
@@ -1047,3 +1057,34 @@ def check_user_creation_confirmation(
 
     # Continue with user creation if confirmation is not required or user already exists
     return
+
+
+def reject_duplicate_provider_link(strategy=None, backend=None, user=None, social=None, **kwargs):
+    """
+    Prevent linking a second identity from the same provider to one Galaxy account.
+
+    Repeat logins for the same linked identity are allowed because the `social`
+    argument is populated in that case. This guard only blocks a new social
+    identity when the account already has a different identity from the same
+    provider.
+    """
+    if strategy is None or user is None or social is not None:
+        return
+
+    provider = strategy.config.get("provider")
+    if not provider:
+        return
+
+    has_provider = user.has_social_auth_provider(provider)
+
+    if not has_provider:
+        return
+
+    provider_label = strategy.config.get("LABEL", provider.capitalize())
+    login_redirect_url = strategy.config.get(setting_name("LOGIN_REDIRECT_URL"), "/")
+    message = quote(
+        f"This Galaxy account already has a linked {provider_label} identity. "
+        "Disconnect it before linking another identity from the same provider."
+    )
+    redirect_url = f"{login_redirect_url}user/external_ids?message={message}&status=danger"
+    return redirect_url

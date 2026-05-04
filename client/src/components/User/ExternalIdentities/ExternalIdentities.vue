@@ -13,7 +13,7 @@
             <b-alert
                 dismissible
                 fade
-                variant="warning"
+                :variant="errorVariant"
                 :show="errorMessage !== null"
                 @dismissed="errorMessage = null"
                 >{{ errorMessage }}</b-alert
@@ -77,7 +77,7 @@
             <b-alert
                 dismissible
                 fade
-                variant="warning"
+                :variant="errorVariant"
                 :show="errorMessage !== null"
                 @dismissed="errorMessage = null"
                 >{{ errorMessage }}</b-alert
@@ -87,7 +87,7 @@
         <div v-if="enable_oidc" class="external-subheading">
             <h2 class="h-md">Connect Other External Identities</h2>
             <hr class="my-4" />
-            <ExternalLogin />
+            <ExternalLogin :exclude-idps="linkedProviders" />
         </div>
     </section>
 </template>
@@ -120,11 +120,15 @@ export default {
             loading: false,
             doomedItem: null,
             errorMessage: null,
+            errorVariant: "warning",
             enable_oidc: galaxy.config.enable_oidc,
             userEmail: galaxy.user.get("email"),
         };
     },
     computed: {
+        linkedProviders() {
+            return [...new Set(this.items.map((item) => item.provider))];
+        },
         connectExternal() {
             var urlParams = new URLSearchParams(window.location.search);
             return urlParams.has("connect_external") && urlParams.get("connect_external") == "true";
@@ -155,8 +159,15 @@ export default {
     },
     mounted() {
         const params = new URLSearchParams(window.location.search);
-        const notificationMessage = purify.sanitize(params.get("notification"));
-        Toast.success(notificationMessage);
+        const message = params.get("message");
+        if (message) {
+            this.errorMessage = purify.sanitize(message);
+            this.errorVariant = params.get("status") === "danger" ? "danger" : "warning";
+        }
+        const notificationMessage = params.get("notification");
+        if (notificationMessage) {
+            Toast.success(purify.sanitize(notificationMessage));
+        }
     },
     methods: {
         capitalizeAsTitle(str) {

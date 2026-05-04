@@ -3860,8 +3860,11 @@
 :Description:
     Disable local accounts. If this option is set to true, at least
     one OIDC provider needs to be configured and will serve as the
-    account provider. If this option is set to true,
-    allow_local_account creation will be overridden with false.
+    account provider. If only one OIDC provider is configured, Galaxy
+    treats it as the account provider and will not allow multiple
+    identities from that same provider to be linked to a single Galaxy
+    account. If this option is set to true, allow_local_account
+    creation will be overridden with false.
 :Default: ``false``
 :Type: bool
 
@@ -6018,6 +6021,5 @@
     for user defined tools.
 :Default: ``false``
 :Type: bool
-
 
 

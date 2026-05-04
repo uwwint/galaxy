@@ -22,6 +22,10 @@ Leveraging OpenID Connect (OIDC) protocol, we enable login to Galaxy without exp
 
 2. Configure Galaxy. In the `galaxy.yml` file enable the OIDC service using the `enable_oidc` key and set the two configuration files (i.e., `oidc_config_file` and `oidc_backends_config_file`), based on the IdP information.
 
+Galaxy can associate more than one external provider with a single Galaxy account, but it only allows one identity per provider on that account by default. In other words, one user can link both Google and Keycloak, but not two different Keycloak identities to the same Galaxy user unless the policy is explicitly changed.
+
+When `disable_local_accounts` is enabled and there is only a single OIDC provider configured, that provider becomes the instance's primary account provider. In that mode, the expected flow is to use the external identity as the account login path rather than to build up multiple same-provider links.
+
 The configuration is explained with provider-specific details at [User Authentication Configuration](https://galaxyproject.org/authnz/config/oidc/). How to authenticate from the user perspective we describe [here](https://galaxyproject.org/authnz/use/oidc/).
 
 ## Authentication Framework
